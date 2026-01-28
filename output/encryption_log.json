@@ -1,0 +1,25 @@
+{
+  "total": 1,
+  "successful": 1,
+  "failed": 0,
+  "results": [
+    {
+      "status": "success",
+      "image": "st1.png",
+      "output_dir": "C:\\image security_IEEE\\output\\encrypted_images\\st1",
+      "original_shape": [
+        791,
+        1386,
+        3
+      ],
+      "roi_percent": 74.78934185634564,
+      "encrypted_shape": [
+        791,
+        1386,
+        3
+      ],
+      "entropy": 7.9998
+    }
+  ],
+  "timestamp": "2026-01-28T11:33:27.533264"
+}

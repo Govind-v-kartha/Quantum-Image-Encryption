@@ -1,0 +1,73 @@
+# Configuration File
+# Secure Image Encryption Pipeline - Settings
+
+quantum:
+  # Quantum encryption settings
+  backend: "qasm_simulator"           # qasm_simulator, statevector_simulator
+  enable_noise_model: false           # Add realistic quantum noise
+  shots: 1024                         # Measurement shots for QASM
+  arnold_iterations: 100              # Arnold Cat Map iterations
+  encode_depth: 8                     # Bits per pixel for NEQR
+
+classical:
+  # Classical chaos encryption settings
+  chaos_param_r: 3.99                 # Logistic-Sine map parameter
+  hlsm_iterations: 1000000            # HLSM sequence length
+  seed_precision: 64                  # Seed float precision (bits)
+  default_seed_x: 0.3                 # Default HLSM seed X
+  default_seed_y: 0.7                 # Default HLSM seed Y
+  entropy_target: 7.99                # Target Shannon entropy
+
+model:
+  # AI segmentation model settings
+  architecture: "vit_base_patch16_32" # ViT architecture variant
+  head_type: "upernet"                # Segmentation head type
+  pretrained: true                    # Use pretrained weights
+  device: "cuda"                      # cuda or cpu
+  dtype: "float32"                    # Data type precision
+
+processing:
+  # Image processing settings
+  image_format: "RGB"                 # Color format (RGB or BGR)
+  max_image_size: 2048                # Maximum image dimension
+  tile_size: 512                      # Processing tile size
+  num_workers: 4                      # Data loading workers
+  normalize_input: true               # Normalize to [0, 1]
+  normalize_output: true              # Normalize output
+
+splitting:
+  # Image splitting settings
+  roi_threshold: 0.5                  # Mask threshold for ROI
+  validate_reconstruction: true       # Validate I = ROI + BG
+  reconstruction_tolerance: 1e-6      # MSE tolerance
+
+output:
+  # Output settings
+  save_intermediate: true             # Save ROI and BG separately
+  save_metadata: true                 # Save pipeline metadata
+  compression: "lossless"             # lossless or none
+  metadata_format: "json"             # json or yaml
+  output_dtype: "uint16"              # Final image dtype
+
+logging:
+  # Logging settings
+  level: "INFO"                       # DEBUG, INFO, WARNING, ERROR
+  verbose: true                       # Detailed output messages
+  log_file: "pipeline.log"            # Log file path
+  timestamp_format: "%Y-%m-%d %H:%M:%S"
+
+performance:
+  # Performance optimization settings
+  use_gpu: true                       # Enable GPU if available
+  batch_processing: false             # Process multiple images
+  batch_size: 1                       # Batch size if enabled
+  cache_models: true                  # Cache loaded models
+  parallelize_channels: false         # Parallelize RGB channels
+
+security:
+  # Security settings
+  store_keys: true                    # Store encryption keys
+  key_format: "numpy"                 # numpy or encrypted
+  key_encryption_enabled: false       # Encrypt keys themselves
+  secure_delete: false                # Securely delete temp files
+  audit_logging: true                 # Log all operations

@@ -1,0 +1,24 @@
+{
+  "original_shape": [
+    791,
+    1386,
+    3
+  ],
+  "neqr_shape": [
+    128,
+    128,
+    3
+  ],
+  "encode_depth": 8,
+  "quantization_levels": 256,
+  "h": 128,
+  "w": 128,
+  "target_size": 128,
+  "was_resized": true,
+  "scramble_iterations": 100,
+  "key_shape": [
+    128,
+    128,
+    3
+  ]
+}
