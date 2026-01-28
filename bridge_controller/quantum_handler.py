@@ -41,7 +41,7 @@ class QuantumEncryptionHandler:
         except ImportError:
             self.qiskit_available = False
             if self.verbose:
-                print("⚠️  Qiskit not available. Using classical approximation of quantum operations.")
+                print("[WARNING] Qiskit not available. Using classical approximation of quantum operations.")
     
     def arnold_scrambling(
         self, 
@@ -131,8 +131,8 @@ class QuantumEncryptionHandler:
         # Resize to target size if needed (NEQR constraint: max 128x128)
         if h > target_size or w > target_size:
             if self.verbose:
-                print(f"⚠️  Image size ({h}×{w}) exceeds NEQR limit ({target_size}×{target_size})")
-                print(f"Resizing to {target_size}×{target_size}...")
+                print(f"[WARNING] Image size ({h}x{w}) exceeds NEQR limit ({target_size}x{target_size})")
+                print(f"Resizing to {target_size}x{target_size}...")
             
             image = cv2.resize(image, (target_size, target_size), interpolation=cv2.INTER_AREA)
             h, w = target_size, target_size

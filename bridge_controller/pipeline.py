@@ -117,8 +117,8 @@ class BridgeController:
             }
             
             if self.verbose:
-                print(f"✓ Image loaded: {image.shape}")
-                print(f"✓ Mask loaded: {mask.shape}")
+                print(f"[OK] Image loaded: {image.shape}")
+                print(f"[OK] Mask loaded: {mask.shape}")
             
             # Stage 2: Image Splitting
             if self.verbose:
@@ -191,7 +191,7 @@ class BridgeController:
             
             if encrypted_roi.shape != encrypted_bg.shape:
                 if self.verbose:
-                    print(f"⚠️  Size mismatch detected:")
+                    print(f"[WARNING] Size mismatch detected:")
                     print(f"  Encrypted ROI: {encrypted_roi.shape} (NEQR resized)")
                     print(f"  Encrypted BG: {encrypted_bg.shape} (original)")
                     print(f"  Resizing ROI back to original size...")
@@ -210,7 +210,7 @@ class BridgeController:
             final_encrypted = np.clip(final_encrypted, 0, 65535).astype(np.uint16)
             
             if self.verbose:
-                print(f"✓ Encrypted matrices fused")
+                print(f"[OK] Encrypted matrices fused")
                 print(f"  Final shape: {final_encrypted.shape}")
                 print(f"  Value range: [{final_encrypted.min()}, {final_encrypted.max()}]")
             
@@ -244,7 +244,7 @@ class BridgeController:
             
             if self.verbose:
                 print("\n" + "=" * 70)
-                print("✓ PIPELINE COMPLETE - All stages successful!")
+                print("[OK] PIPELINE COMPLETE - All stages successful!")
                 print("=" * 70 + "\n")
             
         except Exception as e:
@@ -275,28 +275,28 @@ class BridgeController:
         np.save(str(final_path), final_encrypted)
         files["final_encrypted"] = str(final_path)
         if self.verbose:
-            print(f"✓ Final encrypted image: {final_path}")
+            print(f"[OK] Final encrypted image: {final_path}")
         
         # Save encrypted ROI
         roi_path = output_dir / "encrypted_roi.npy"
         np.save(str(roi_path), encrypted_roi)
         files["encrypted_roi"] = str(roi_path)
         if self.verbose:
-            print(f"✓ Encrypted ROI: {roi_path}")
+            print(f"[OK] Encrypted ROI: {roi_path}")
         
         # Save encrypted background
         bg_path = output_dir / "encrypted_background.npy"
         np.save(str(bg_path), encrypted_bg)
         files["encrypted_background"] = str(bg_path)
         if self.verbose:
-            print(f"✓ Encrypted background: {bg_path}")
+            print(f"[OK] Encrypted background: {bg_path}")
         
         # Save chaos key
         key_path = output_dir / "chaos_key.npy"
         np.save(str(key_path), chaos_key)
         files["chaos_key"] = str(key_path)
         if self.verbose:
-            print(f"✓ Chaos key: {key_path}")
+            print(f"[OK] Chaos key: {key_path}")
         
         # Save ROI metadata
         roi_meta_path = output_dir / "roi_metadata.json"
@@ -309,7 +309,7 @@ class BridgeController:
             json.dump(metadata_serializable, f, indent=2)
         files["roi_metadata"] = str(roi_meta_path)
         if self.verbose:
-            print(f"✓ ROI metadata: {roi_meta_path}")
+            print(f"[OK] ROI metadata: {roi_meta_path}")
         
         return files
     
@@ -324,7 +324,7 @@ class BridgeController:
             json.dump(serializable_results, f, indent=2)
         
         if self.verbose:
-            print(f"✓ Pipeline metadata: {meta_path}")
+            print(f"[OK] Pipeline metadata: {meta_path}")
         
         return str(meta_path)
     
@@ -385,7 +385,7 @@ class BridgeController:
         # which should be stored separately during encryption
         
         if self.verbose:
-            print(f"✓ Decryption complete")
+            print(f"[OK] Decryption complete")
             print(f"  Background decrypted: {decrypted_bg.shape}")
         
         return decrypted_bg
