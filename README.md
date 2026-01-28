@@ -30,13 +30,13 @@ This is an **integration project**, not a from-scratch implementation. We levera
 
 **Repository**: [FlexiMo](repos/FlexiMo)
 
-### Engine B: The Security (Quantum-Image-Encryption)
+### Engine B: The Security (Multi-Stage-Quantum-Image-Encryption)
 
 **What we use**: NEQR (Novel Enhanced Quantum Representation) + Arnold Scrambling + Chaos-based encryption
 
 **The Specific Function**: Converts pixel data into quantum states (qubits) and scrambles them with mathematical unbreakability.
 
-**Repository**: [Quantum-Image-Encryption](repos/Quantum-Image-Encryption)
+**Repository**: [Multi-Stage-Quantum-Image-Encryption](https://github.com/Govind-v-kartha/Multi-Stage-Quantum-Image-Encryption)
 
 ## The Zero-Loss Strategy: Block-Based Tiling
 
@@ -160,7 +160,7 @@ Output      → Single encrypted image file
 ├── main.py                    # Main pipeline entry point
 ├── repos/                     # Integration repositories
 │   ├── FlexiMo/              # AI segmentation model
-│   └── Quantum-Image-Encryption/  # Quantum encryption algorithms
+│   └── Multi-Stage-Quantum-Image-Encryption/  # Quantum encryption algorithms
 ├── input/                     # Place satellite images here
 ├── output/                    # Results
 │   ├── encrypted_images/
@@ -252,7 +252,7 @@ See `requirements.txt` for complete list.
 
 This project integrates two specialized open-source repositories:
 - **FlexiMo**: Flexible Remote Sensing Foundation Model (IEEE TGRS)
-- **Quantum-Image-Encryption**: NEQR + Chaos encryption (Govind-v-kartha)
+- **Multi-Stage-Quantum-Image-Encryption**: NEQR + Chaos encryption with multi-stage pipeline (Govind-v-kartha)
 
 ## References
 
