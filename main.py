@@ -318,11 +318,7 @@ def main():
     project_root = Path(__file__).parent
     input_dir = project_root / "input"
     output_dir = project_root / "output"
-    encrypted_dir = output_dir / "encrypted_images"
-    decrypted_dir = output_dir / "decrypted_images"
-    
-    encrypted_dir.mkdir(parents=True, exist_ok=True)
-    decrypted_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     print("\n" + "="*80)
     print("SECURE SATELLITE IMAGE ENCRYPTION PIPELINE")
@@ -410,12 +406,11 @@ def main():
         print(f"           Full encrypted vs original - pixels different: {total_diff}/{image.size} ({(total_diff/image.size)*100:.1f}%)")
         print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Save encrypted image
-        result_dir = encrypted_dir / image_file.stem
+        # Save encrypted and decrypted images to top-level folders
+        result_dir = output_dir / f"{image_file.stem}_encrypted"
         result_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create decrypted directory path for this image
-        decrypted_result_dir = decrypted_dir / image_file.stem
+        decrypted_result_dir = output_dir / f"{image_file.stem}_decrypted"
         decrypted_result_dir.mkdir(parents=True, exist_ok=True)
         
         # Add timestamp overlay to encrypted image
