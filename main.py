@@ -33,7 +33,7 @@ warnings.filterwarnings('ignore')
 
 def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
     """
-    Add timestamp, PSNR, and SSIM metrics as overlay on image.
+    Add timestamp, PSNR, and SSIM metrics on a white background panel at top of image.
     
     Parameters
     ----------
@@ -45,30 +45,32 @@ def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
     Returns
     -------
     image_with_overlay : np.ndarray
-        Image with text overlay
+        Image with white background panel and metrics
     """
-    image_copy = image.copy()
+    image_copy = image.astype(np.uint8).copy()
     h, w = image_copy.shape[:2]
     
-    # Create semi-transparent overlay background (larger dark area at top)
-    overlay = image_copy.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 140), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.85, image_copy, 0.15, 0, image_copy)
+    # Create white background panel at top
+    panel_height = 110
+    white_panel = np.ones((panel_height, w, 3), dtype=np.uint8) * 255  # Pure white
     
-    # Text properties - LARGER for visibility
+    # Combine white panel on top + image below
+    image_with_panel = np.vstack([white_panel, image_copy])
+    
+    # Text properties
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7  # Increased from 0.5
-    color = (0, 255, 0)  # Green
-    thickness = 2  # Increased from 1
-    line_spacing = 35  # Increased from 28
+    font_scale = 0.9
+    text_color = (0, 0, 0)  # Black text on white background
+    thickness = 2
+    line_spacing = 32
     
-    # Add metrics text
-    y_offset = 25
+    # Add metrics text on white panel
+    y_offset = 32
     
     # Timestamp
     if 'timestamp' in metrics:
         timestamp_text = f"Time: {metrics['timestamp']}"
-        cv2.putText(image_copy, timestamp_text, (10, y_offset), font, font_scale, color, thickness)
+        cv2.putText(image_with_panel, timestamp_text, (15, y_offset), font, font_scale, text_color, thickness)
         y_offset += line_spacing
     
     # PSNR
@@ -78,15 +80,15 @@ def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
             psnr_text = f"PSNR: inf dB (Perfect)"
         else:
             psnr_text = f"PSNR: {psnr_val:.2f} dB"
-        cv2.putText(image_copy, psnr_text, (10, y_offset), font, font_scale, color, thickness)
+        cv2.putText(image_with_panel, psnr_text, (15, y_offset), font, font_scale, text_color, thickness)
         y_offset += line_spacing
     
     # SSIM
     if 'ssim' in metrics and metrics['ssim'] is not None:
         ssim_text = f"SSIM: {metrics['ssim']:.4f}"
-        cv2.putText(image_copy, ssim_text, (10, y_offset), font, font_scale, color, thickness)
+        cv2.putText(image_with_panel, ssim_text, (15, y_offset), font, font_scale, text_color, thickness)
     
-    return image_copy
+    return image_with_panel
 
 
 def calculate_psnr(original: np.ndarray, reconstructed: np.ndarray) -> float:
@@ -316,8 +318,11 @@ def main():
     project_root = Path(__file__).parent
     input_dir = project_root / "input"
     output_dir = project_root / "output"
+    encrypted_dir = output_dir / "encrypted_images"
+    decrypted_dir = output_dir / "decrypted_images"
     
-    output_dir.mkdir(parents=True, exist_ok=True)
+    encrypted_dir.mkdir(parents=True, exist_ok=True)
+    decrypted_dir.mkdir(parents=True, exist_ok=True)
     
     print("\n" + "="*80)
     print("SECURE SATELLITE IMAGE ENCRYPTION PIPELINE")
@@ -360,6 +365,9 @@ def main():
         print(f"  [Stage 2] AI Segmentation...")
         t0 = time.time()
         roi_mask = get_ai_segmentation(image)
+        roi_pixels = np.count_nonzero(roi_mask)
+        roi_percentage = (roi_pixels / roi_mask.size) * 100
+        print(f"           ROI detected: {roi_pixels} pixels ({roi_percentage:.1f}%)")
         print(f"           Time: {time.time()-t0:.2f}s")
         
         # Stage 3: Zero-Loss Splitter (32×32 tiling)
@@ -379,6 +387,11 @@ def main():
             tile_seed = (master_seed + tile_idx) % (2**31)
             encrypted_tile = simple_quantum_encrypt_tile(tile, tile_seed)
             encrypted_roi_tiles.append(encrypted_tile)
+            
+            # Debug: Check first tile encryption
+            if tile_idx == 0:
+                tile_diff = np.sum(tile != encrypted_tile)
+                print(f"           First tile - Original vs Encrypted pixels different: {tile_diff}/{tile.size}")
         
         # Path B: Classical encryption on background
         encrypted_bg = simple_classical_encrypt_bg(image, roi_mask, master_seed)
@@ -392,11 +405,18 @@ def main():
             w_tile = tile_pos['tile_width']
             encrypted_image[y:y+h_tile, x:x+w_tile, :] = encrypted_roi_tiles[tile_idx][:h_tile, :w_tile, :]
         
+        # Verify encryption happened
+        total_diff = np.sum(image != encrypted_image)
+        print(f"           Full encrypted vs original - pixels different: {total_diff}/{image.size} ({(total_diff/image.size)*100:.1f}%)")
         print(f"           Time: {time.time()-t0:.2f}s")
         
         # Save encrypted image
-        result_dir = output_dir / image_file.stem
+        result_dir = encrypted_dir / image_file.stem
         result_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create decrypted directory path for this image
+        decrypted_result_dir = decrypted_dir / image_file.stem
+        decrypted_result_dir.mkdir(parents=True, exist_ok=True)
         
         # Add timestamp overlay to encrypted image
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -420,6 +440,12 @@ def main():
             tile_seed = (master_seed + tile_idx) % (2**31)
             decrypted_tile = simple_quantum_decrypt_tile(encrypted_tile, tile_seed)
             decrypted_roi_tiles.append(decrypted_tile)
+            
+            # Debug: Check first tile decryption
+            if tile_idx == 0:
+                original_tile = roi_tiles[0]
+                tile_diff = np.sum(original_tile != decrypted_tile)
+                print(f"           First tile - Original vs Decrypted pixels different: {tile_diff}/{original_tile.size}")
         
         # Reconstruct decrypted ROI layer
         decrypted_roi_layer = np.zeros((h, w, 3), dtype=np.uint8)
@@ -438,8 +464,8 @@ def main():
         decrypted_roi_bgr = cv2.cvtColor(decrypted_roi_layer, cv2.COLOR_RGB2BGR)
         decrypted_bg_bgr = cv2.cvtColor(decrypted_bg_layer.astype(np.uint8), cv2.COLOR_RGB2BGR)
         
-        cv2.imwrite(str(result_dir / "decrypted_layer_roi.png"), decrypted_roi_bgr)
-        cv2.imwrite(str(result_dir / "decrypted_layer_background.png"), decrypted_bg_bgr)
+        cv2.imwrite(str(decrypted_result_dir / "decrypted_layer_roi.png"), decrypted_roi_bgr)
+        cv2.imwrite(str(decrypted_result_dir / "decrypted_layer_background.png"), decrypted_bg_bgr)
         
         # Final fusion
         decrypted_image = decrypted_roi_layer.copy()
@@ -447,8 +473,8 @@ def main():
         decrypted_image[~roi_mask_bool] = decrypted_bg_layer.astype(np.uint8)[~roi_mask_bool]
         
         decrypted_bgr = cv2.cvtColor(decrypted_image, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(result_dir / "final_decrypted_image.png"), decrypted_bgr)
-        np.save(str(result_dir / "decrypted_image.npy"), decrypted_image)
+        cv2.imwrite(str(decrypted_result_dir / "final_decrypted_image.png"), decrypted_bgr)
+        np.save(str(decrypted_result_dir / "decrypted_image.npy"), decrypted_image)
         
         print(f"           Time: {time.time()-t0:.2f}s")
         
@@ -460,9 +486,12 @@ def main():
             ssim = calculate_ssim(original_image, decrypted_image)
             diff = np.abs(original_image.astype(np.float32) - decrypted_image.astype(np.float32))
             print(f"\n  [Metrics]")
-            print(f"    PSNR: {psnr:.2f} dB")
+            print(f"    PSNR: {psnr:.2f} dB" if psnr != float('inf') else f"    PSNR: inf dB (Perfect)")
             print(f"    SSIM: {ssim:.4f}")
             print(f"    Mean Pixel Difference: {diff.mean():.2f}")
+            print(f"    Max Pixel Difference: {diff.max():.2f}")
+            print(f"    Original - Min: {original_image.min()}, Max: {original_image.max()}")
+            print(f"    Decrypted - Min: {decrypted_image.min()}, Max: {decrypted_image.max()}")
         
         # Add overlay with metrics to decrypted image
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -472,8 +501,10 @@ def main():
             'ssim': ssim
         }
         decrypted_image_with_overlay = add_metrics_overlay(decrypted_image, decrypted_metrics)
+        
+        # Save decrypted image in decrypted folder
         decrypted_bgr_overlay = cv2.cvtColor(decrypted_image_with_overlay, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(result_dir / "final_decrypted_image_with_metrics.png"), decrypted_bgr_overlay)
+        cv2.imwrite(str(decrypted_result_dir / "final_decrypted_image_with_metrics.png"), decrypted_bgr_overlay)
         
         # Save metadata
         metadata = {
