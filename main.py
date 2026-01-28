@@ -50,20 +50,20 @@ def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
     image_copy = image.copy()
     h, w = image_copy.shape[:2]
     
-    # Create semi-transparent overlay background (dark area at top)
+    # Create semi-transparent overlay background (larger dark area at top)
     overlay = image_copy.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 100), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.7, image_copy, 0.3, 0, image_copy)
+    cv2.rectangle(overlay, (0, 0), (w, 140), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.85, image_copy, 0.15, 0, image_copy)
     
-    # Text properties
+    # Text properties - LARGER for visibility
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.5
+    font_scale = 0.7  # Increased from 0.5
     color = (0, 255, 0)  # Green
-    thickness = 1
-    line_spacing = 28
+    thickness = 2  # Increased from 1
+    line_spacing = 35  # Increased from 28
     
     # Add metrics text
-    y_offset = 20
+    y_offset = 25
     
     # Timestamp
     if 'timestamp' in metrics:
@@ -73,7 +73,11 @@ def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
     
     # PSNR
     if 'psnr' in metrics and metrics['psnr'] is not None:
-        psnr_text = f"PSNR: {metrics['psnr']:.2f} dB"
+        psnr_val = metrics['psnr']
+        if psnr_val == float('inf'):
+            psnr_text = f"PSNR: inf dB (Perfect)"
+        else:
+            psnr_text = f"PSNR: {psnr_val:.2f} dB"
         cv2.putText(image_copy, psnr_text, (10, y_offset), font, font_scale, color, thickness)
         y_offset += line_spacing
     
