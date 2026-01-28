@@ -248,11 +248,41 @@ These metrics demonstrate that the smart tiling strategy maintains full resoluti
 
 See `requirements.txt` for complete list.
 
-## License & Attribution
+## About
+
+**Multi-Stage Quantum Image Encryption** is a cutting-edge security framework that combines AI-powered intelligent object detection with quantum-grade encryption. The system bridges the gap between real-world image sizes and quantum encryption capabilities through adaptive block-based tiling.
+
+**Key Strengths**:
+- Zero-loss encryption: Maintains 100% original resolution
+- Domain-agnostic: Works with satellite, medical, and general imagery
+- Scalable: Tile-based architecture enables parallel processing
+- Production-ready: Clean, maintainable codebase with comprehensive testing
+- Modular design: Easily integrate new AI models or encryption algorithms
+
+**Use Cases**:
+- Secure satellite image storage and transmission
+- Medical image encryption for HIPAA compliance
+- Military/defense infrastructure protection
+- Sensitive data visualization with quantum-level security
+- Privacy-preserving remote sensing analytics
+
+## License
+
+This project is licensed under the **MIT License** - see the LICENSE file for details.
+
+MIT License Summary:
+- ✅ Commercial use allowed
+- ✅ Modification allowed
+- ✅ Distribution allowed
+- ✅ Private use allowed
+- ⚠️ Liability: As-is without warranty
+- ⚠️ Warranty: None provided
+
+## Attribution
 
 This project integrates two specialized open-source repositories:
-- **FlexiMo**: Flexible Remote Sensing Foundation Model (IEEE TGRS)
-- **Multi-Stage-Quantum-Image-Encryption**: NEQR + Chaos encryption with multi-stage pipeline (Govind-v-kartha)
+- **FlexiMo**: Flexible Remote Sensing Foundation Model (IEEE TGRS) - [Repository](repos/FlexiMo)
+- **Multi-Stage-Quantum-Image-Encryption**: NEQR + Chaos encryption with multi-stage pipeline (Govind-v-kartha) - [Repository](https://github.com/Govind-v-kartha/Multi-Stage-Quantum-Image-Encryption)
 
 ## References
 
