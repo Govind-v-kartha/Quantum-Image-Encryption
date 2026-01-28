@@ -28,6 +28,103 @@ warnings.filterwarnings('ignore')
 
 
 # ============================================================================
+# UTILITY FUNCTIONS - Image Overlay with Metrics
+# ============================================================================
+
+def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
+    """
+    Add timestamp, PSNR, and SSIM metrics as overlay on image.
+    
+    Parameters
+    ----------
+    image : np.ndarray
+        Input image (H, W, 3) in RGB format
+    metrics : dict
+        Dictionary with keys: 'timestamp', 'psnr', 'ssim'
+    
+    Returns
+    -------
+    image_with_overlay : np.ndarray
+        Image with text overlay
+    """
+    image_copy = image.copy()
+    h, w = image_copy.shape[:2]
+    
+    # Create semi-transparent overlay background (dark area at top)
+    overlay = image_copy.copy()
+    cv2.rectangle(overlay, (0, 0), (w, 100), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.7, image_copy, 0.3, 0, image_copy)
+    
+    # Text properties
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    color = (0, 255, 0)  # Green
+    thickness = 1
+    line_spacing = 28
+    
+    # Add metrics text
+    y_offset = 20
+    
+    # Timestamp
+    if 'timestamp' in metrics:
+        timestamp_text = f"Time: {metrics['timestamp']}"
+        cv2.putText(image_copy, timestamp_text, (10, y_offset), font, font_scale, color, thickness)
+        y_offset += line_spacing
+    
+    # PSNR
+    if 'psnr' in metrics and metrics['psnr'] is not None:
+        psnr_text = f"PSNR: {metrics['psnr']:.2f} dB"
+        cv2.putText(image_copy, psnr_text, (10, y_offset), font, font_scale, color, thickness)
+        y_offset += line_spacing
+    
+    # SSIM
+    if 'ssim' in metrics and metrics['ssim'] is not None:
+        ssim_text = f"SSIM: {metrics['ssim']:.4f}"
+        cv2.putText(image_copy, ssim_text, (10, y_offset), font, font_scale, color, thickness)
+    
+    return image_copy
+
+
+def calculate_psnr(original: np.ndarray, reconstructed: np.ndarray) -> float:
+    """Calculate PSNR between two images."""
+    if original.shape != reconstructed.shape:
+        return None
+    
+    original = original.astype(np.float32)
+    reconstructed = reconstructed.astype(np.float32)
+    
+    mse = np.mean((original - reconstructed) ** 2)
+    if mse == 0:
+        return float('inf')
+    
+    psnr = 10 * np.log10(255 ** 2 / mse)
+    return psnr
+
+
+def calculate_ssim(original: np.ndarray, reconstructed: np.ndarray) -> float:
+    """Calculate SSIM between two images (simplified)."""
+    if original.shape != reconstructed.shape:
+        return None
+    
+    original = original.astype(np.float32) / 255.0
+    reconstructed = reconstructed.astype(np.float32) / 255.0
+    
+    # Simple SSIM calculation using correlation
+    mean_original = np.mean(original)
+    mean_reconstructed = np.mean(reconstructed)
+    
+    cov = np.mean((original - mean_original) * (reconstructed - mean_reconstructed))
+    var_original = np.mean((original - mean_original) ** 2)
+    var_reconstructed = np.mean((reconstructed - mean_reconstructed) ** 2)
+    
+    c1, c2 = 0.01 ** 2, 0.03 ** 2
+    ssim = ((2 * mean_original * mean_reconstructed + c1) * (2 * cov + c2)) / \
+           ((mean_original ** 2 + mean_reconstructed ** 2 + c1) * (var_original + var_reconstructed + c2))
+    
+    return max(0, min(1, ssim))
+
+
+# ============================================================================
 # STAGE 2: AI SEGMENTATION - FlexiMo for Intelligent ROI Detection
 # ============================================================================
 
@@ -297,8 +394,16 @@ def main():
         result_dir = output_dir / image_file.stem
         result_dir.mkdir(parents=True, exist_ok=True)
         
+        # Add timestamp overlay to encrypted image
+        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        encrypted_metrics = {'timestamp': timestamp_str}
+        encrypted_image_with_overlay = add_metrics_overlay(encrypted_image, encrypted_metrics)
+        
         encrypted_bgr = cv2.cvtColor(encrypted_image, cv2.COLOR_RGB2BGR)
+        encrypted_bgr_overlay = cv2.cvtColor(encrypted_image_with_overlay, cv2.COLOR_RGB2BGR)
+        
         cv2.imwrite(str(result_dir / "encrypted_image.png"), encrypted_bgr)
+        cv2.imwrite(str(result_dir / "encrypted_image_with_overlay.png"), encrypted_bgr_overlay)
         np.save(str(result_dir / "encrypted_image.npy"), encrypted_image)
         
         # Stage 5: Decryption with Intermediate Saving
@@ -344,13 +449,27 @@ def main():
         print(f"           Time: {time.time()-t0:.2f}s")
         
         # Calculate metrics
+        psnr = None
+        ssim = None
         if original_image.shape == decrypted_image.shape:
+            psnr = calculate_psnr(original_image, decrypted_image)
+            ssim = calculate_ssim(original_image, decrypted_image)
             diff = np.abs(original_image.astype(np.float32) - decrypted_image.astype(np.float32))
-            mse = np.mean(diff**2)
-            psnr = 10 * np.log10(255**2 / mse) if mse > 0 else float('inf')
             print(f"\n  [Metrics]")
             print(f"    PSNR: {psnr:.2f} dB")
+            print(f"    SSIM: {ssim:.4f}")
             print(f"    Mean Pixel Difference: {diff.mean():.2f}")
+        
+        # Add overlay with metrics to decrypted image
+        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        decrypted_metrics = {
+            'timestamp': timestamp_str,
+            'psnr': psnr,
+            'ssim': ssim
+        }
+        decrypted_image_with_overlay = add_metrics_overlay(decrypted_image, decrypted_metrics)
+        decrypted_bgr_overlay = cv2.cvtColor(decrypted_image_with_overlay, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(str(result_dir / "final_decrypted_image_with_metrics.png"), decrypted_bgr_overlay)
         
         # Save metadata
         metadata = {
