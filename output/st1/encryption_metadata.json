@@ -1,0 +1,46 @@
+{
+  "image_name": "st1.png",
+  "master_seed": 173113314,
+  "roi_coords": {
+    "y": 52,
+    "x": 318,
+    "h": 128,
+    "w": 128,
+    "canvas_h": 128,
+    "canvas_w": 128
+  },
+  "roi_metadata": {
+    "shape": [
+      128,
+      128,
+      3
+    ],
+    "dtype": "uint8",
+    "encryption_type": "quantum",
+    "master_seed": 173113314,
+    "use_quantum_encoding": true,
+    "timestamp": "2026-01-28T12:58:57.736653"
+  },
+  "bg_metadata": {
+    "shape": [
+      791,
+      1386,
+      3
+    ],
+    "dtype": "uint8",
+    "encryption_type": "classical",
+    "master_seed": 173113314,
+    "use_quantum_encoding": false,
+    "roi_mask_shape": [
+      791,
+      1386
+    ],
+    "timestamp": "2026-01-28T12:59:22.187310"
+  },
+  "original_shape": [
+    791,
+    1386,
+    3
+  ],
+  "timestamp": "2026-01-28T12:59:22.188682"
+}

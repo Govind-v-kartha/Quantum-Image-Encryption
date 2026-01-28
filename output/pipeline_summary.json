@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-01-28T11:50:25.012967",
+  "timestamp": "2026-01-28T12:52:58.149910",
   "total": 1,
   "encrypted": 1,
   "decrypted": 1,
   "results": [
     {
       "image": "st1.png",
-      "encryption": "success",
-      "decryption": "success"
+      "status": "success",
+      "output_dir": "C:\\image security_IEEE\\output\\st1"
     }
   ]
 }
