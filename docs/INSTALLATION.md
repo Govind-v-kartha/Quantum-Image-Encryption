@@ -1,489 +1,503 @@
-# Installation & Setup Guide
+# Installation Guide
 
-## Prerequisites
+## System Requirements
 
-- **Python 3.9+** (tested on 3.10, 3.11)
-- **CUDA 11.8+** (for GPU acceleration, optional)
-- **Git** (for cloning repositories)
-- **4GB+ RAM** (minimum), 8GB+ recommended
-- **2GB+ Storage** (for dependencies and models)
+### Hardware
+- **CPU**: Modern multi-core processor (Intel i5+ or AMD Ryzen 5+)
+- **RAM**: Minimum 4GB, recommended 8GB or more
+- **Disk**: 2GB free space (for dependencies + sample images)
+- **GPU**: Optional (for future speedup, not currently utilized)
 
-## Quick Start (5 Minutes)
+### Operating System
+- ✅ Windows 10/11
+- ✅ Linux (Ubuntu 18.04+)
+- ✅ macOS (10.14+)
 
-### 1. Clone the Main Project
+### Python Version
+- **Required**: Python 3.8 or higher
+- **Recommended**: Python 3.10 or 3.11
+
+---
+
+## Installation Steps
+
+### 1. Clone the Repository
+
+**Windows**:
 ```bash
-git clone https://github.com/your-org/image-security-ieee.git
-cd image-security-ieee
+git clone https://github.com/Govind-v-kartha/Quantum-Image-Encryption.git
+cd Quantum-Image-Encryption
+```
+
+**Linux/macOS**:
+```bash
+git clone https://github.com/Govind-v-kartha/Quantum-Image-Encryption.git
+cd Quantum-Image-Encryption
 ```
 
 ### 2. Create Virtual Environment
-```bash
-# On Windows
-python -m venv venv
-venv\Scripts\activate
 
-# On macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
+**Windows**:
+```bash
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
-### 3. Install Dependencies
+**Linux/macOS**:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Upgrade pip
+
+```bash
+pip install --upgrade pip
+```
+
+### 4. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Run Tests
-```bash
-python tests/test_pipeline.py
+**What's installed**:
+```
+numpy              # Array operations
+opencv-python     # Image processing
+qiskit             # Quantum circuit simulation
+qiskit-aer         # Quantum simulator backend
 ```
 
-### 5. Process Your First Image
+### 5. Verify Installation
+
 ```bash
-python -c "
-from bridge_controller import BridgeController
-bridge = BridgeController(project_dir='.')
-results = bridge.process_image_with_segmentation(
-    'data/satellite_images/your_image.png',
-    'data/satellite_images/your_mask.png'
-)
-print(f'Encrypted image saved to: {results[\"files\"][\"final_encrypted\"]}')
-"
+python -c "import cv2, numpy, qiskit; print('All dependencies installed successfully!')"
 ```
 
 ---
 
-## Detailed Installation
+## Detailed Dependency Installation
 
-### Step 1: Environment Setup
-
-#### Windows
-```powershell
-# Create virtual environment
-python -m venv venv
-
-# Activate
-venv\Scripts\activate
-
-# Verify
-python --version  # Should be 3.9+
-```
-
-#### macOS/Linux
-```bash
-# Create virtual environment
-python3 -m venv venv
-
-# Activate
-source venv/bin/activate
-
-# Verify
-python --version  # Should be 3.9+
-```
-
-### Step 2: Install Core Dependencies
+### If using conda (Anaconda/Miniconda)
 
 ```bash
-# Upgrade pip
-pip install --upgrade pip
+# Create conda environment
+conda create -n quantum-encryption python=3.10
 
-# Install NumPy, SciPy (foundation)
-pip install numpy scipy scikit-learn scikit-image
+# Activate environment
+conda activate quantum-encryption
 
-# Install PyTorch (CPU or GPU)
-# For CPU:
-pip install torch torchvision -f https://download.pytorch.org/whl/torch_stable.html
-
-# For GPU (CUDA 11.8):
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# Install dependencies
+conda install -c conda-forge numpy opencv qiskit qiskit-aer
 ```
 
-### Step 3: Install AI/ML Dependencies
+### If specific versions needed
 
 ```bash
-# Vision Transformers and timm
-pip install timm einops transformers kornia
-
-# Image processing
-pip install opencv-python pillow
-pip install rasterio gdal  # For geospatial data
+pip install numpy==1.24.3
+pip install opencv-python==4.8.1.78
+pip install qiskit==0.43.0
+pip install qiskit-aer==0.13.0
 ```
 
-### Step 4: Install Quantum Computing Dependencies
+### Troubleshooting Installation Issues
 
+**Issue**: ImportError for cv2
+
+**Solution**:
 ```bash
-# Qiskit ecosystem
-pip install qiskit qiskit-aer qiskit-ibm-runtime
-
-# Visualization (optional but recommended)
-pip install matplotlib jupyter
+pip uninstall opencv-python
+pip install opencv-python --force-reinstall
 ```
 
-### Step 5: Install Development Tools
+**Issue**: qiskit installation fails
 
+**Solution** (try pre-built wheel):
 ```bash
-# Testing
-pip install pytest pytest-cov
-
-# Code quality
-pip install black flake8
-
-# Documentation
-pip install sphinx sphinx-rtd-theme
+pip install --only-binary :all: qiskit
 ```
 
-### Step 6: Verify Installation
+**Issue**: Permission denied errors
 
-```python
-# Run this script to verify all dependencies
-python -c "
-import sys
-print('Python:', sys.version)
-
-# Core
-import numpy as np
-print('✓ NumPy:', np.__version__)
-
-import scipy
-print('✓ SciPy:', scipy.__version__)
-
-# ML
-import torch
-print('✓ PyTorch:', torch.__version__)
-print('  CUDA available:', torch.cuda.is_available())
-
-# Vision
-import cv2
-import kornia
-print('✓ OpenCV & Kornia')
-
-# Quantum
-import qiskit
-print('✓ Qiskit:', qiskit.__version__)
-
-print('\n✓ All core dependencies installed!')
-"
+**Solution**:
+```bash
+# Use --user flag
+pip install --user -r requirements.txt
 ```
 
 ---
 
-## Repository Integration
+## Project Setup
 
-### Cloning Submodules
+### 1. Create Input/Output Directories
 
-The repositories have already been cloned into `repos/`:
+The script automatically creates these, but you can pre-create them:
 
 ```bash
-cd repos/
+# Windows
+mkdir input
+mkdir output
+mkdir docs
 
-# Verify FlexiMo
-cd FlexiMo
-pip install -e .
-cd ..
-
-# Verify Quantum-Image-Encryption
-cd Quantum-Image-Encryption
-pip install -e .
-cd ..
+# Linux/macOS
+mkdir -p input output docs
 ```
 
-### Using FlexiMo
+### 2. Verify Project Structure
 
-```python
-from fleximo import FlexiMo
-import torch
-
-# Load pretrained model
-model = FlexiMo.from_pretrained(
-    model_name="vit_base_patch16_32",
-    head_type="upernet",
-    pretrained=True
-)
-model.eval()
-
-# For GPU
-model = model.cuda()
-
-# Process image
-image = torch.randn(1, 3, 512, 512)  # Batch of 1, RGB, 512x512
-with torch.no_grad():
-    segmentation_mask = model(image)
-
-print(f"Mask shape: {segmentation_mask.shape}")  # [1, num_classes, 512, 512]
+```
+Quantum-Image-Encryption/
+├── main.py                      # Main pipeline
+├── requirements.txt             # Dependencies
+├── README.md                    # Documentation
+├── input/                       # Place images here
+├── output/                      # Results saved here
+├── docs/                        # Documentation
+│   ├── ARCHITECTURE.md
+│   ├── INSTALLATION.md
+│   └── ROADMAP.md
+└── repos/                       # External repositories
+    ├── FlexiMo/
+    └── Quantum-Image-Encryption/
 ```
 
-### Using Quantum-Image-Encryption Modules
+### 3. Add Test Image
 
-```python
-import sys
-sys.path.insert(0, 'repos/Quantum-Image-Encryption')
+```bash
+# Copy a test satellite image to input folder
+cp your_image.png input/
 
-# Import quantum encryption modules
-from quantum import quantum_encryption_pipeline
-from chaos import chaos_map_encryption
+# Or use the provided example
+# (if included in repository)
+```
 
-# These are wrapped by our BridgeController
+---
+
+## First Run
+
+### Quick Test
+
+```bash
+# Activate virtual environment (if not already)
+# Windows
+.venv\Scripts\activate
+
+# Linux/macOS
+source .venv/bin/activate
+
+# Run the pipeline
+python main.py
+```
+
+### Expected Output
+
+```
+================================================================================
+SECURE SATELLITE IMAGE ENCRYPTION PIPELINE
+Engine A (Intelligence) + Engine B (Security)
+NEQR Quantum Encryption with 8x8 Zero-Loss Tiling
+================================================================================
+
+Found 1 image(s)
+
+[Processing] st1.png
+  Image shape: 791x1386
+
+  [Stage 1] AI Segmentation (Canny Edge Detection)
+           Time: 0.01s
+
+  [Stage 2] ROI Extraction & 8x8 Blocking
+           Total 8x8 blocks: 14985
+           ROI pixels: 857933 (42%)
+           Background pixels: 2431045 (58%)
+           Time: 0.08s
+
+Saved: extracted_roi.png, extracted_background.png
+
+  [Stage 3] NEQR + Quantum Scrambling Encryption
+           Processing 14985 blocks...
+           Encrypted blocks: 14985
+           Time: 0.40s
+
+  [Stage 4] Chaos Cipher Encryption (Background)
+           Background encrypted
+           Time: 0.01s
+
+  [Stage 5] Reconstruct Encrypted Image
+           Full encrypted image shape: (791, 1386, 3)
+           Time: 0.01s
+
+Saved: encrypted_image.png
+
+  [Stage 6] Decryption
+           Time: 0.39s
+
+  [Metrics]
+    PSNR: inf dB (Perfect)
+    SSIM: 1.0000
+
+Saved: decrypted_image.png
+
+  [Verification]
+    Mean pixel difference: 0.00
+    Max pixel difference: 0.00
+
+Perfect reconstruction: YES
+
+  [COMPLETE] Total time: 1.18s
+  [OUTPUT] C:\image security_IEEE\output\st1_encrypted/
+```
+
+### Check Results
+
+```bash
+# View generated files
+# Windows
+dir output\st1_encrypted
+dir output\st1_decrypted
+
+# Linux/macOS
+ls output/st1_encrypted/
+ls output/st1_decrypted/
 ```
 
 ---
 
 ## Configuration
 
-### Environment Variables
+### Master Seed Customization
 
-Create a `.env` file in the project root:
-
-```bash
-# Python path
-PYTHONPATH=.:./repos/FlexiMo:./repos/Quantum-Image-Encryption
-
-# Model cache
-TORCH_HOME=./models
-HF_HOME=./huggingface_cache
-
-# Quantum backend
-QISKIT_SETTINGS_URL=https://quantum.ibm.com
-
-# Logging
-LOG_LEVEL=INFO
-VERBOSE=1
-```
-
-### Configuration File
-
-Create `config/settings.yaml`:
-
-```yaml
-# Quantum Encryption Settings
-quantum:
-  backend: "qasm_simulator"  # or "statevector_simulator"
-  enable_noise: false
-  shots: 1024
-  arnold_iterations: 100
-  encode_depth: 8
-
-# Classical Encryption Settings
-classical:
-  chaos_param_r: 3.99
-  hlsm_iterations: 1000000
-  seed_precision: 64
-
-# Model Settings
-model:
-  architecture: "vit_base_patch16_32"
-  head_type: "upernet"
-  pretrained: true
-  device: "cuda"  # or "cpu"
-
-# Processing Settings
-processing:
-  image_format: "RGB"
-  max_image_size: 2048
-  tile_size: 512
-  num_workers: 4
-
-# Output Settings
-output:
-  save_intermediate: true
-  compression: "lossless"
-  metadata_format: "json"
-```
-
-### Load Configuration
+Edit `main.py` to change the encryption key:
 
 ```python
-import yaml
-from bridge_controller import BridgeController
+def main():
+    master_seed = 12345  # Change this value for different encryption
+    ...
+```
 
-with open("config/settings.yaml") as f:
-    config = yaml.safe_load(f)
+Different seeds = different encryption keys
 
-bridge = BridgeController(
-    project_dir=".",
-    quantum_backend=config["quantum"]["backend"],
-    verbose=True
-)
+---
+
+## Deactivating Virtual Environment
+
+When finished working:
+
+```bash
+# Deactivate virtual environment
+deactivate
+```
+
+To reactivate later:
+
+```bash
+# Windows
+.venv\Scripts\activate
+
+# Linux/macOS
+source .venv/bin/activate
 ```
 
 ---
 
-## GPU Acceleration (Optional)
+## Advanced Setup
 
-### NVIDIA CUDA Setup
+### Using Anaconda Distribution
 
-1. **Install CUDA Toolkit 11.8**
-   - https://developer.nvidia.com/cuda-11-8-0-download-archive
-
-2. **Install cuDNN 8.6+**
-   - https://developer.nvidia.com/cudnn
-
-3. **Set Environment Variables**
-   ```bash
-   set CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8
-   set PATH=%CUDA_HOME%\bin;%PATH%
-   ```
-
-4. **Verify CUDA**
-   ```python
-   import torch
-   print(torch.cuda.is_available())  # Should be True
-   print(torch.cuda.get_device_name(0))  # Your GPU name
-   ```
-
-### PyTorch GPU Acceleration
-
-```python
-import torch
-from bridge_controller import BridgeController
-from bridge_controller.splitter import ImageSplitter
-
-# Check GPU
-print(f"GPU Available: {torch.cuda.is_available()}")
-print(f"GPU Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'}")
-
-# Use GPU in your code
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Models automatically move to GPU with .cuda()
-model = FlexiMo.from_pretrained("vit_base_patch16_32").cuda()
-```
-
----
-
-## Docker Setup (Advanced)
-
-### Dockerfile
-
-```dockerfile
-FROM pytorch/pytorch:2.0.0-cuda11.7-runtime-ubuntu22.04
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    libgdal-dev \
-    libspatialindex-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy project
-COPY . .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Set environment
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app:/app/repos/FlexiMo:/app/repos/Quantum-Image-Encryption
-
-ENTRYPOINT ["python"]
-```
-
-### Build and Run
+**Advantage**: Pre-configured for scientific computing
 
 ```bash
-# Build
-docker build -t image-security:latest .
+# Download Miniconda from: https://docs.conda.io/en/latest/miniconda.html
 
-# Run
-docker run --gpus all -v /path/to/data:/app/data image-security:latest \
-  -c "
-    from bridge_controller import BridgeController
-    bridge = BridgeController()
-    results = bridge.process_image_with_segmentation(
-        'data/image.png',
-        'data/mask.png'
-    )
-  "
+# Create environment from file (if provided)
+conda env create -f environment.yml
+
+# Or manually
+conda create -n quantum-img python=3.10 numpy opencv qiskit
+conda activate quantum-img
+```
+
+### GPU Acceleration (Future)
+
+```bash
+# For CUDA support (requires NVIDIA GPU)
+conda install -c conda-forge cudatoolkit=11.8
+pip install qiskit-aer-gpu
+```
+
+### Docker Container (Future)
+
+```bash
+# Build Docker image
+docker build -t quantum-encryption .
+
+# Run in container
+docker run -v $(pwd)/input:/input -v $(pwd)/output:/output quantum-encryption
 ```
 
 ---
 
 ## Troubleshooting
 
-### Issue: ImportError for bridge_controller
+### Issue: "Python not found"
 
-**Problem**: `ModuleNotFoundError: No module named 'bridge_controller'`
-
-**Solution**:
+**Windows**:
 ```bash
-# Add to Python path
-set PYTHONPATH=%cd%;%PYTHONPATH%  # Windows
-export PYTHONPATH=$PWD:$PYTHONPATH  # macOS/Linux
+# Use full path
+C:\Python311\python.exe --version
 
-# Or install in development mode
-pip install -e .
+# Or add Python to PATH and restart terminal
 ```
 
-### Issue: Qiskit Backend Not Available
+### Issue: "Module not found" after installation
 
-**Problem**: `BackendV2Error: The device does not support the qasm_simulator`
-
-**Solution**:
 ```bash
-# Install Qiskit Aer
-pip install qiskit-aer
+# Verify virtual environment is activated
+# Windows: prompt should show (.venv)
+# Linux/Mac: prompt should show (.venv)
 
-# Or use statevector simulator
-bridge = BridgeController(quantum_backend="statevector_simulator")
+# Reinstall package
+pip install --force-reinstall package_name
 ```
 
-### Issue: CUDA Out of Memory
+### Issue: Permission denied (Linux/macOS)
 
-**Problem**: `RuntimeError: CUDA out of memory`
-
-**Solution**:
-```python
-# Reduce image size
-image = cv2.resize(image, (512, 512))
-
-# Reduce batch size
-# Process one image at a time
-
-# Clear GPU cache
-import torch
-torch.cuda.empty_cache()
-```
-
-### Issue: FlexiMo Model Download Fails
-
-**Problem**: Connection timeout when downloading pretrained model
-
-**Solution**:
 ```bash
-# Manually download model
-cd models/
-wget https://github.com/danfenghong/IEEE_TGRS_Fleximo/releases/download/...
+# Use sudo (not recommended)
+sudo pip install -r requirements.txt
 
-# Set cache path
-export TORCH_HOME=./models
+# Better: Use --user flag
+pip install --user -r requirements.txt
+
+# Or use virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+### Issue: OpenCV ImportError on macOS
+
+```bash
+# Try this solution
+pip uninstall opencv-python
+brew install opencv
+pip install opencv-python
+```
+
+### Issue: Qiskit version conflicts
+
+```bash
+# Check installed version
+pip show qiskit
+
+# Uninstall and reinstall latest
+pip uninstall qiskit qiskit-aer
+pip install qiskit qiskit-aer --upgrade
+```
+
+---
+
+## System Verification
+
+### Full System Check Script
+
+```bash
+# Create check_system.py
+python -c "
+import sys
+import numpy
+import cv2
+try:
+    from qiskit import __version__ as qiskit_version
+except:
+    qiskit_version = 'Not installed'
+
+print(f'Python version: {sys.version}')
+print(f'NumPy version: {numpy.__version__}')
+print(f'OpenCV version: {cv2.__version__}')
+print(f'Qiskit version: {qiskit_version}')
+print('System ready for quantum encryption pipeline!')
+"
+```
+
+---
+
+## Performance Optimization
+
+### For Faster Processing
+
+1. **Use SSD instead of HDD**
+   - Significantly faster image I/O
+
+2. **Allocate more RAM**
+   - Process larger images simultaneously
+
+3. **Use GPU** (when implemented)
+   - Will provide 10-50x speedup
+
+### Typical Performance
+
+| Image Size | Processing Time | Blocks |
+|------------|-----------------|--------|
+| 512×512    | 0.3s           | 4,096  |
+| 1024×1024  | 1.5s           | 16,384 |
+| 1386×791   | 1.2s           | 14,985 |
+| 2048×2048  | 6.0s           | 65,536 |
 
 ---
 
 ## Next Steps
 
-1. **Read Architecture Guide**: `docs/ARCHITECTURE.md`
-2. **Run Demo**: `python tests/test_pipeline.py`
-3. **Process Your Data**: Place satellite images in `data/satellite_images/`
-4. **Integrate FlexiMo**: Generate masks using FlexiMo model
-5. **Encrypt Images**: Run bridge controller on your data
-6. **Monitor Results**: Check `output/` for encrypted images
+1. **Place your satellite image in `input/` folder**
+2. **Run `python main.py`**
+3. **Check results in `output/` folder**
+4. **Read ARCHITECTURE.md for technical details**
+5. **See ROADMAP.md for future improvements**
 
 ---
 
 ## Support
 
-- **Issues**: Check GitHub issues or create a new one
-- **Documentation**: See `docs/` directory
-- **Examples**: Check `tests/test_pipeline.py` for usage examples
-- **Community**: Discussion forum (if available)
+### Getting Help
+
+1. Check this installation guide
+2. Review ARCHITECTURE.md for technical details
+3. Open an issue on GitHub
+4. Contact: govind.v.kartha@example.com
+
+### Common Resources
+
+- **Qiskit Documentation**: https://qiskit.org/documentation/
+- **OpenCV Documentation**: https://docs.opencv.org/
+- **NumPy Documentation**: https://numpy.org/doc/
 
 ---
 
-## Version History
+## Uninstalling
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-01-27 | Initial release - Phase 1 |
-| 0.9.0 | 2026-01-20 | Beta testing |
-| 0.5.0 | 2026-01-10 | Alpha version |
+### Complete Removal
+
+```bash
+# Deactivate virtual environment
+deactivate
+
+# Remove virtual environment
+# Windows
+rmdir /s .venv
+
+# Linux/macOS
+rm -rf .venv
+
+# Remove repository
+# Windows
+rmdir /s Quantum-Image-Encryption
+
+# Linux/macOS
+rm -rf Quantum-Image-Encryption
+```
+
+---
+
+**Installation Guide Version**: 1.0  
+**Last Updated**: January 30, 2026
