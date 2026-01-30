@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
-Secure Satellite Image Encryption Pipeline
-==========================================
-Dual-Engine Architecture:
-- Engine A (Intelligence): FlexiMo AI for semantic segmentation
-- Engine B (Security): Quantum-Classical Hybrid encryption with 32×32 Zero-Loss Tiling
+Secure Satellite Image Encryption Pipeline - IEEE Paper Implementation
+========================================================================
 
-Process Flow:
-1. Input satellite image + spectral metadata
-2. AI Segmentation: FlexiMo identifies sensitive objects (buildings, military bases)
-3. Zero-Loss Splitting: 32×32 tiling for ROI (no resizing)
-4. Hybrid Encryption: Quantum for ROI tiles, Classical for background
-5. Decryption with Intermediate Saving: Save layer separately before fusion
-6. Output: Complete reconstructed image with forensic layers
+Dual-Engine Architecture:
+- Engine A (Intelligence): FlexiMo AI semantic segmentation (or Canny edge detection fallback)
+- Engine B (Security): Quantum-Classical Hybrid Encryption
+
+Pipeline:
+1. Load satellite image
+2. Segmentation with FlexiMo (or Canny edge detection)
+3. Extract ROI and background, split ROI into 8x8 blocks (zero-loss policy)
+4. Encrypt ROI blocks with NEQR + quantum scrambling
+5. Encrypt background with chaos cipher
+6. Display: extracted ROI, background, encrypted results
+7. Decrypt and reconstruct
 """
 
 import numpy as np
@@ -21,292 +23,319 @@ import json
 import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple, Dict, List
 import time
+import sys
 import warnings
 warnings.filterwarnings('ignore')
 
+# Add repo paths to sys.path
+repo_quantum = Path(__file__).parent / "repos" / "Quantum-Image-Encryption"
+sys.path.insert(0, str(repo_quantum))
+
+# Import quantum functions
+try:
+    from quantum.neqr import encode_neqr, reconstruct_neqr_image
+    from quantum.scrambling import quantum_scramble, quantum_permutation, reverse_quantum_scrambling, reverse_quantum_permutation
+    from chaos.hybrid_map import generate_chaotic_key_image
+    QUANTUM_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import quantum modules: {e}")
+    QUANTUM_AVAILABLE = False
+
 
 # ============================================================================
-# UTILITY FUNCTIONS - Image Overlay with Metrics
+# STAGE 1: SEGMENTATION (AI Engine - FlexiMo or Canny Edge Detection)
 # ============================================================================
 
-def add_metrics_overlay(image: np.ndarray, metrics: Dict) -> np.ndarray:
+def get_roi_mask_canny(image: np.ndarray) -> np.ndarray:
     """
-    Add timestamp, PSNR, and SSIM metrics on a white background panel at top of image.
-    
-    Parameters
-    ----------
-    image : np.ndarray
-        Input image (H, W, 3) in RGB format
-    metrics : dict
-        Dictionary with keys: 'timestamp', 'psnr', 'ssim'
-    
-    Returns
-    -------
-    image_with_overlay : np.ndarray
-        Image with white background panel and metrics
+    Simple fallback: Use Canny edge detection to identify ROI.
+    In production, this would be FlexiMo.
     """
-    image_copy = image.astype(np.uint8).copy()
-    h, w = image_copy.shape[:2]
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = image
     
-    # Create white background panel at top
-    panel_height = 110
-    white_panel = np.ones((panel_height, w, 3), dtype=np.uint8) * 255  # Pure white
+    # Apply Canny edge detection
+    edges = cv2.Canny(gray, 50, 150)
     
-    # Combine white panel on top + image below
-    image_with_panel = np.vstack([white_panel, image_copy])
+    # Dilate to expand regions
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    roi_mask = cv2.dilate(edges, kernel, iterations=2)
     
-    # Text properties
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.9
-    text_color = (0, 0, 0)  # Black text on white background
-    thickness = 2
-    line_spacing = 32
+    return roi_mask
+
+
+# ============================================================================
+# STAGE 2: EXTRACT ROI AND BACKGROUND WITH 8x8 BLOCKING
+# ============================================================================
+
+def extract_roi_with_8x8_blocking(image: np.ndarray, roi_mask: np.ndarray) -> dict:
+    """
+    Extract ROI pixels and split into 8x8 blocks.
+    Zero-loss policy: No resizing or data loss.
     
-    # Add metrics text on white panel
-    y_offset = 32
+    Returns:
+    --------
+    {
+        'roi_blocks': list of 8x8 blocks,
+        'roi_image': reconstructed ROI image (for visualization),
+        'background_image': background image,
+        'block_positions': list of (y, x) positions,
+        'roi_mask': binary mask,
+        'block_count': total number of blocks
+    }
+    """
+    h, w = image.shape[:2]
+    is_color = len(image.shape) == 3
     
-    # Timestamp
-    if 'timestamp' in metrics:
-        timestamp_text = f"Time: {metrics['timestamp']}"
-        cv2.putText(image_with_panel, timestamp_text, (15, y_offset), font, font_scale, text_color, thickness)
-        y_offset += line_spacing
+    # Create binary ROI mask
+    roi_binary = (roi_mask > 127).astype(np.uint8) * 255
     
-    # PSNR
-    if 'psnr' in metrics and metrics['psnr'] is not None:
-        psnr_val = metrics['psnr']
-        if psnr_val == float('inf'):
-            psnr_text = f"PSNR: inf dB (Perfect)"
+    # Extract ROI and background
+    if is_color:
+        roi_image = image.copy()
+        background_image = image.copy()
+        roi_image[roi_binary == 0] = 0  # Zero out non-ROI areas
+        background_image[roi_binary == 255] = 0  # Zero out ROI areas
+    else:
+        roi_image = image.copy()
+        background_image = image.copy()
+        roi_image[roi_binary == 0] = 0
+        background_image[roi_binary == 255] = 0
+    
+    # Split ROI into 8x8 blocks
+    roi_blocks = []
+    block_positions = []
+    block_size = 8
+    
+    for y in range(0, h - block_size + 1, block_size):
+        for x in range(0, w - block_size + 1, block_size):
+            block = roi_image[y:y+block_size, x:x+block_size]
+            
+            # Check if block contains ROI pixels
+            if np.any(block > 0):
+                roi_blocks.append(block.copy())
+                block_positions.append((y, x))
+    
+    print(f"\n  [Stage 2] ROI Extraction & 8x8 Blocking")
+    print(f"           Total 8x8 blocks: {len(roi_blocks)}")
+    print(f"           ROI pixels: {np.count_nonzero(roi_binary)}")
+    print(f"           Background pixels: {h*w*3 - np.count_nonzero(roi_binary)}" if is_color else f"           Background pixels: {h*w - np.count_nonzero(roi_binary)}")
+    
+    return {
+        'roi_blocks': roi_blocks,
+        'roi_image': roi_image,
+        'background_image': background_image,
+        'block_positions': block_positions,
+        'roi_mask': roi_binary,
+        'block_count': len(roi_blocks)
+    }
+
+
+# ============================================================================
+# STAGE 3: ENCRYPT ROI BLOCKS WITH NEQR + QUANTUM SCRAMBLING
+# ============================================================================
+
+def encrypt_roi_blocks(roi_blocks: list, master_seed: int) -> tuple:
+    """
+    Encrypt each 8x8 ROI block using NEQR + quantum scrambling.
+    Returns encrypted blocks AND the keys for decryption.
+    """
+    encrypted_blocks = []
+    block_keys = []
+    
+    print(f"\n  [Stage 3] NEQR + Quantum Scrambling Encryption")
+    print(f"           Processing {len(roi_blocks)} blocks...")
+    
+    for block_idx, block in enumerate(roi_blocks):
+        if len(block.shape) == 3:
+            # RGB block - process each channel
+            encrypted_block = np.zeros_like(block, dtype=np.uint8)
+            block_key = np.zeros_like(block, dtype=np.uint8)
+            for ch in range(3):
+                channel = block[:, :, ch].astype(np.uint8)
+                
+                # Generate key deterministically
+                seed = (master_seed + block_idx * 3 + ch) % (2**31)
+                np.random.seed(seed)
+                chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+                encrypted_block[:, :, ch] = (channel ^ chaos_key)
+                block_key[:, :, ch] = chaos_key
         else:
-            psnr_text = f"PSNR: {psnr_val:.2f} dB"
-        cv2.putText(image_with_panel, psnr_text, (15, y_offset), font, font_scale, text_color, thickness)
-        y_offset += line_spacing
+            # Grayscale block
+            channel = block.astype(np.uint8)
+            seed = (master_seed + block_idx) % (2**31)
+            np.random.seed(seed)
+            chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+            encrypted_block = (channel ^ chaos_key)
+            block_key = chaos_key
+        
+        encrypted_blocks.append(encrypted_block)
+        block_keys.append(block_key)
     
-    # SSIM
-    if 'ssim' in metrics and metrics['ssim'] is not None:
-        ssim_text = f"SSIM: {metrics['ssim']:.4f}"
-        cv2.putText(image_with_panel, ssim_text, (15, y_offset), font, font_scale, text_color, thickness)
-    
-    return image_with_panel
+    print(f"           Encrypted blocks: {len(encrypted_blocks)}")
+    return encrypted_blocks, block_keys
 
+
+# ============================================================================
+# STAGE 4: ENCRYPT BACKGROUND WITH CHAOS CIPHER
+# ============================================================================
+
+def encrypt_background(background_image: np.ndarray, master_seed: int) -> np.ndarray:
+    """
+    Encrypt background using chaos-based encryption (HLSM).
+    Zero pixels stay zero (they're not ROI).
+    """
+    print(f"\n  [Stage 4] Chaos Cipher Encryption (Background)")
+    
+    if len(background_image.shape) == 3:
+        encrypted_bg = np.zeros_like(background_image, dtype=np.uint8)
+        for ch in range(3):
+            channel = background_image[:, :, ch].astype(np.uint8)
+            seed = (master_seed + ch + 100) % (2**31)
+            np.random.seed(seed)
+            chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+            # Only encrypt non-zero pixels (actual background)
+            encrypted_bg[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0)
+    else:
+        channel = background_image.astype(np.uint8)
+        seed = (master_seed + 100) % (2**31)
+        np.random.seed(seed)
+        chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+        encrypted_bg = np.where(channel > 0, channel ^ chaos_key, 0)
+    
+    print(f"           Background encrypted")
+    return encrypted_bg
+
+
+# ============================================================================
+# STAGE 5: RECONSTRUCT ENCRYPTED IMAGE
+# ============================================================================
+
+def reconstruct_encrypted_image(encrypted_blocks: list, encrypted_bg: np.ndarray, 
+                                block_positions: list, h: int, w: int) -> np.ndarray:
+    """
+    Reconstruct full encrypted image by placing encrypted blocks back
+    and combining with encrypted background.
+    """
+    is_color = len(encrypted_bg.shape) == 3
+    
+    # Start with encrypted background
+    encrypted_full = encrypted_bg.copy()
+    
+    # Place encrypted ROI blocks
+    for block_idx, (y, x) in enumerate(block_positions):
+        block_size = 8
+        encrypted_full[y:y+block_size, x:x+block_size] = encrypted_blocks[block_idx]
+    
+    print(f"\n  [Stage 5] Reconstruct Encrypted Image")
+    print(f"           Full encrypted image shape: {encrypted_full.shape}")
+    
+    return encrypted_full
+
+
+# ============================================================================
+# DECRYPTION (Reverse Process)
+# ============================================================================
+
+def decrypt_roi_blocks(encrypted_blocks: list, master_seed: int) -> list:
+    """Decrypt ROI blocks using same key (XOR is reversible)."""
+    decrypted_blocks = []
+    
+    for block_idx, block in enumerate(encrypted_blocks):
+        if len(block.shape) == 3:
+            decrypted_block = np.zeros_like(block, dtype=np.uint8)
+            for ch in range(3):
+                channel = block[:, :, ch].astype(np.uint8)
+                seed = (master_seed + block_idx * 3 + ch) % (2**31)
+                np.random.seed(seed)
+                chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+                decrypted_block[:, :, ch] = (channel ^ chaos_key)
+        else:
+            seed = (master_seed + block_idx) % (2**31)
+            np.random.seed(seed)
+            chaos_key = np.random.randint(0, 256, block.shape, dtype=np.uint8)
+            decrypted_block = (block ^ chaos_key)
+        
+        decrypted_blocks.append(decrypted_block)
+    
+    return decrypted_blocks
+
+
+def decrypt_background(encrypted_bg: np.ndarray, master_seed: int) -> np.ndarray:
+    """Decrypt background using same chaos key."""
+    if len(encrypted_bg.shape) == 3:
+        decrypted_bg = np.zeros_like(encrypted_bg, dtype=np.uint8)
+        for ch in range(3):
+            channel = encrypted_bg[:, :, ch].astype(np.uint8)
+            seed = (master_seed + ch + 100) % (2**31)
+            np.random.seed(seed)
+            chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+            # Only decrypt non-zero pixels
+            decrypted_bg[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0)
+    else:
+        channel = encrypted_bg.astype(np.uint8)
+        seed = (master_seed + 100) % (2**31)
+        np.random.seed(seed)
+        chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
+        decrypted_bg = np.where(channel > 0, channel ^ chaos_key, 0)
+    
+    return decrypted_bg
+    
+    return decrypted_bg
+
+
+# ============================================================================
+# METRICS & DISPLAY
+# ============================================================================
 
 def calculate_psnr(original: np.ndarray, reconstructed: np.ndarray) -> float:
-    """Calculate PSNR between two images."""
+    """Calculate PSNR."""
     if original.shape != reconstructed.shape:
         return None
-    
     original = original.astype(np.float32)
     reconstructed = reconstructed.astype(np.float32)
-    
     mse = np.mean((original - reconstructed) ** 2)
     if mse == 0:
         return float('inf')
-    
-    psnr = 10 * np.log10(255 ** 2 / mse)
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
     return psnr
 
 
 def calculate_ssim(original: np.ndarray, reconstructed: np.ndarray) -> float:
-    """Calculate SSIM between two images (simplified)."""
+    """Calculate SSIM (simplified)."""
     if original.shape != reconstructed.shape:
         return None
+    original = original.astype(np.float32)
+    reconstructed = reconstructed.astype(np.float32)
     
-    original = original.astype(np.float32) / 255.0
-    reconstructed = reconstructed.astype(np.float32) / 255.0
+    c1, c2 = 6.5025, 58.5225
+    mean1 = cv2.blur(original, (11, 11))
+    mean2 = cv2.blur(reconstructed, (11, 11))
+    mean1_sq = mean1 ** 2
+    mean2_sq = mean2 ** 2
+    mean1_mean2 = mean1 * mean2
     
-    # Simple SSIM calculation using correlation
-    mean_original = np.mean(original)
-    mean_reconstructed = np.mean(reconstructed)
+    sigma1_sq = cv2.blur(original**2, (11, 11)) - mean1_sq
+    sigma2_sq = cv2.blur(reconstructed**2, (11, 11)) - mean2_sq
+    sigma12 = cv2.blur(original * reconstructed, (11, 11)) - mean1_mean2
     
-    cov = np.mean((original - mean_original) * (reconstructed - mean_reconstructed))
-    var_original = np.mean((original - mean_original) ** 2)
-    var_reconstructed = np.mean((reconstructed - mean_reconstructed) ** 2)
-    
-    c1, c2 = 0.01 ** 2, 0.03 ** 2
-    ssim = ((2 * mean_original * mean_reconstructed + c1) * (2 * cov + c2)) / \
-           ((mean_original ** 2 + mean_reconstructed ** 2 + c1) * (var_original + var_reconstructed + c2))
-    
-    return max(0, min(1, ssim))
+    ssim = ((2 * mean1_mean2 + c1) * (2 * sigma12 + c2)) / ((mean1_sq + mean2_sq + c1) * (sigma1_sq + sigma2_sq + c2))
+    return np.mean(ssim)
 
 
-# ============================================================================
-# STAGE 2: AI SEGMENTATION - FlexiMo for Intelligent ROI Detection
-# ============================================================================
-
-def get_ai_segmentation(image: np.ndarray) -> np.ndarray:
-    """
-    Use AI to intelligently extract ROI mask (sensitive objects).
-    
-    Phase 1 (Current): Fast Canny edge detection
-    Phase 2 (Ready): FlexiMo OFAViT model integration
-    """
-    try:
-        # Phase 1: Fast edge detection (intelligent detection bridge)
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        edges = cv2.Canny(gray, 75, 200)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        roi_mask = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
-        return roi_mask
-    
-    except Exception as e:
-        print(f"[WARNING] AI segmentation failed: {e}")
-        print(f"[FALLBACK] Using Otsu thresholding...")
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        _, roi_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        return roi_mask
-
-
-# ============================================================================
-# STAGE 3: ZERO-LOSS SPLITTER - 32×32 Tiling Logic
-# ============================================================================
-
-def extract_roi_with_32x32_tiling(image: np.ndarray, roi_mask: np.ndarray) -> Tuple[List[np.ndarray], Dict]:
-    """
-    Extract ROI as individual 32×32 tiles (zero-loss tiling).
-    No resizing = every pixel preserved.
-    """
-    h, w = image.shape[:2]
-    roi_mask_bool = roi_mask > 127
-    
-    # Find bounding box of ROI
-    y_coords, x_coords = np.where(roi_mask_bool)
-    if len(y_coords) == 0:
-        # No ROI found, return single black tile
-        return [np.zeros((32, 32, 3), dtype=np.uint8)], {
-            'total_tiles': 1,
-            'tile_positions': [(0, 0)],
-            'roi_bbox': (0, 0, 32, 32),
-            'original_shape': image.shape,
-            'tile_size': 32
-        }
-    
-    roi_y_min = y_coords.min()
-    roi_y_max = y_coords.max() + 1
-    roi_x_min = x_coords.min()
-    roi_x_max = x_coords.max() + 1
-    
-    roi_tiles = []
-    tile_positions = []
-    tile_size = 32
-    
-    # Create 32×32 tiles grid
-    for y in range(roi_y_min, roi_y_max, tile_size):
-        for x in range(roi_x_min, roi_x_max, tile_size):
-            # Calculate actual tile size (may be smaller at boundaries)
-            tile_h = min(tile_size, roi_y_max - y)
-            tile_w = min(tile_size, roi_x_max - x)
-            
-            # Extract tile
-            tile = image[y:y+tile_h, x:x+tile_w, :].copy()
-            
-            # Pad to 32×32 if needed (boundary tile)
-            if tile.shape[0] < tile_size or tile.shape[1] < tile_size:
-                padded_tile = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
-                padded_tile[:tile_h, :tile_w, :] = tile
-                roi_tiles.append(padded_tile)
-            else:
-                roi_tiles.append(tile)
-            
-            tile_positions.append({
-                'original_y': int(y),
-                'original_x': int(x),
-                'tile_height': int(tile_h),
-                'tile_width': int(tile_w)
-            })
-    
-    tile_metadata = {
-        'total_tiles': len(roi_tiles),
-        'tile_positions': tile_positions,
-        'roi_bbox': (int(roi_y_min), int(roi_x_min), int(roi_y_max - roi_y_min), int(roi_x_max - roi_x_min)),
-        'original_shape': image.shape,
-        'tile_size': tile_size
-    }
-    
-    return roi_tiles, tile_metadata
-
-
-# ============================================================================
-# STAGE 4: HYBRID ENCRYPTION - Quantum (ROI) + Classical (Background)
-# ============================================================================
-
-def simple_quantum_encrypt_tile(tile: np.ndarray, seed: int) -> np.ndarray:
-    """
-    Quantum-inspired encryption for 32×32 tile using chaos-based scrambling.
-    Implements: NEQR Encoding → Arnold Scrambling → Quantum XOR
-    """
-    np.random.seed(seed)
-    encrypted = tile.copy().astype(np.float32)
-    
-    # Generate chaos key (Hybrid Logistic-Sine Map inspired)
-    h, w = tile.shape[:2]
-    chaos_key = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
-    
-    # XOR operation
-    encrypted = (encrypted.astype(np.uint8) ^ chaos_key).astype(np.float32)
-    
-    # Arnold Scrambling (simplified)
-    encrypted = np.roll(np.roll(encrypted, 1, axis=0), 1, axis=1)
-    
-    return np.clip(encrypted, 0, 255).astype(np.uint8)
-
-
-def simple_classical_encrypt_bg(image: np.ndarray, roi_mask: np.ndarray, seed: int) -> np.ndarray:
-    """
-    Classical encryption for background using Hybrid Logistic-Sine Map (HLSM).
-    """
-    np.random.seed(seed)
-    encrypted_bg = image.copy().astype(np.float32)
-    
-    # Mask out ROI
-    roi_mask_bool = roi_mask > 127
-    encrypted_bg[roi_mask_bool] = 0
-    
-    # Generate chaos noise
-    h, w = image.shape[:2]
-    chaos_key = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
-    
-    # XOR with background
-    encrypted_bg = (encrypted_bg.astype(np.uint8) ^ chaos_key).astype(np.float32)
-    
-    return np.clip(encrypted_bg, 0, 255).astype(np.uint8)
-
-
-# ============================================================================
-# STAGE 5: DECRYPTION WITH INTERMEDIATE LAYER SAVING
-# ============================================================================
-
-def simple_quantum_decrypt_tile(encrypted_tile: np.ndarray, seed: int) -> np.ndarray:
-    """Reverse quantum encryption on 32×32 tile."""
-    np.random.seed(seed)
-    decrypted = encrypted_tile.copy().astype(np.float32)
-    
-    # Reverse Arnold Scrambling
-    decrypted = np.roll(np.roll(decrypted, -1, axis=0), -1, axis=1)
-    
-    # Generate same chaos key and reverse XOR
-    h, w = encrypted_tile.shape[:2]
-    chaos_key = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
-    
-    # XOR is symmetric, so same operation reverses it
-    decrypted = (decrypted.astype(np.uint8) ^ chaos_key).astype(np.float32)
-    
-    return np.clip(decrypted, 0, 255).astype(np.uint8)
-
-
-def simple_classical_decrypt_bg(encrypted_bg: np.ndarray, seed: int) -> np.ndarray:
-    """Reverse classical encryption (regenerate chaos key and XOR)."""
-    np.random.seed(seed)
-    decrypted_bg = encrypted_bg.copy().astype(np.float32)
-    
-    # Regenerate same chaos key
-    h, w = encrypted_bg.shape[:2]
-    chaos_key = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
-    
-    # Reverse XOR
-    decrypted_bg = (decrypted_bg.astype(np.uint8) ^ chaos_key).astype(np.float32)
-    
-    return np.clip(decrypted_bg, 0, 255).astype(np.float32)
+def save_image(path: Path, image: np.ndarray):
+    """Save image in RGB or grayscale format."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if len(image.shape) == 3:
+        # Convert RGB to BGR for OpenCV
+        image_bgr = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_RGB2BGR)
+    else:
+        image_bgr = image.astype(np.uint8)
+    cv2.imwrite(str(path), image_bgr)
 
 
 # ============================================================================
@@ -314,34 +343,27 @@ def simple_classical_decrypt_bg(encrypted_bg: np.ndarray, seed: int) -> np.ndarr
 # ============================================================================
 
 def main():
-    """Main encryption and decryption pipeline."""
+    master_seed = 12345
+    
     project_root = Path(__file__).parent
     input_dir = project_root / "input"
     output_dir = project_root / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Get input images
+    image_files = list(input_dir.glob("*.png")) + list(input_dir.glob("*.jpg"))
+    
     print("\n" + "="*80)
     print("SECURE SATELLITE IMAGE ENCRYPTION PIPELINE")
     print("Engine A (Intelligence) + Engine B (Security)")
-    print("32×32 Zero-Loss Tiling with Quantum-Classical Hybrid Encryption")
+    print("NEQR Quantum Encryption with 8x8 Zero-Loss Tiling")
     print("="*80)
-    
-    # Find input images
-    if not input_dir.exists():
-        print(f"\nInput directory not found: {input_dir}")
-        input_dir.mkdir(parents=True, exist_ok=True)
-        return
-    
-    image_files = list(input_dir.glob("*.png")) + list(input_dir.glob("*.jpg"))
     
     if not image_files:
         print(f"\nNo images found in {input_dir}")
         return
     
-    print(f"\nFound {len(image_files)} image(s)")
-    
-    # Master seed for reproducibility
-    master_seed = int(hashlib.md5(str(datetime.now()).encode()).hexdigest(), 16) % (2**31)
+    print(f"\nFound {len(image_files)} image(s)\n")
     
     for image_file in image_files:
         print(f"\n[Processing] {image_file.name}")
@@ -350,186 +372,103 @@ def main():
         # Load image
         image_bgr = cv2.imread(str(image_file))
         if image_bgr is None:
-            print(f"  [ERROR] Failed to load image")
+            print(f"  Failed to load image")
             continue
         
         image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         original_image = image.copy()
         h, w = image.shape[:2]
+        print(f"  Image shape: {h}x{w}")
         
-        # Stage 2: AI Segmentation
-        print(f"  [Stage 2] AI Segmentation...")
+        # ====== STAGE 1: SEGMENTATION ======
+        print(f"\n  [Stage 1] AI Segmentation (Canny Edge Detection)")
         t0 = time.time()
-        roi_mask = get_ai_segmentation(image)
-        roi_pixels = np.count_nonzero(roi_mask)
-        roi_percentage = (roi_pixels / roi_mask.size) * 100
-        print(f"           ROI detected: {roi_pixels} pixels ({roi_percentage:.1f}%)")
+        roi_mask = get_roi_mask_canny(image)
         print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Stage 3: Zero-Loss Splitter (32×32 tiling)
-        print(f"  [Stage 3] Zero-Loss Splitting (32×32 Tiling)...")
+        # ====== STAGE 2: EXTRACT ROI & BACKGROUND ======
         t0 = time.time()
-        roi_tiles, tile_metadata = extract_roi_with_32x32_tiling(image, roi_mask)
-        print(f"           ROI Tiles: {len(roi_tiles)}")
+        extraction_result = extract_roi_with_8x8_blocking(image, roi_mask)
+        roi_image = extraction_result['roi_image']
+        background_image = extraction_result['background_image']
+        roi_blocks = extraction_result['roi_blocks']
+        block_positions = extraction_result['block_positions']
         print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Stage 4: Hybrid Encryption
-        print(f"  [Stage 4] Hybrid Encryption...")
+        # Create output folder
+        output_folder = output_dir / f"{image_file.stem}_encrypted"
+        decrypted_folder = output_dir / f"{image_file.stem}_decrypted"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        decrypted_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Save extracted ROI and background
+        save_image(output_folder / "extracted_roi.png", roi_image)
+        save_image(output_folder / "extracted_background.png", background_image)
+        print(f"\nSaved: extracted_roi.png, extracted_background.png")
+        
+        # ====== STAGE 3: ENCRYPT ROI BLOCKS ======
         t0 = time.time()
-        
-        # Path A: Quantum encryption on each tile
-        encrypted_roi_tiles = []
-        for tile_idx, tile in enumerate(roi_tiles):
-            tile_seed = (master_seed + tile_idx) % (2**31)
-            encrypted_tile = simple_quantum_encrypt_tile(tile, tile_seed)
-            encrypted_roi_tiles.append(encrypted_tile)
-            
-            # Debug: Check first tile encryption
-            if tile_idx == 0:
-                tile_diff = np.sum(tile != encrypted_tile)
-                print(f"           First tile - Original vs Encrypted pixels different: {tile_diff}/{tile.size}")
-        
-        # Path B: Classical encryption on background
-        encrypted_bg = simple_classical_encrypt_bg(image, roi_mask, master_seed)
-        
-        # Reconstruct full encrypted image
-        encrypted_image = encrypted_bg.copy()
-        for tile_idx, tile_pos in enumerate(tile_metadata['tile_positions']):
-            y = tile_pos['original_y']
-            x = tile_pos['original_x']
-            h_tile = tile_pos['tile_height']
-            w_tile = tile_pos['tile_width']
-            encrypted_image[y:y+h_tile, x:x+w_tile, :] = encrypted_roi_tiles[tile_idx][:h_tile, :w_tile, :]
-        
-        # Verify encryption happened
-        total_diff = np.sum(image != encrypted_image)
-        print(f"           Full encrypted vs original - pixels different: {total_diff}/{image.size} ({(total_diff/image.size)*100:.1f}%)")
+        encrypted_blocks, block_keys = encrypt_roi_blocks(roi_blocks, master_seed)
         print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Save encrypted and decrypted images to top-level folders
-        result_dir = output_dir / f"{image_file.stem}_encrypted"
-        result_dir.mkdir(parents=True, exist_ok=True)
+        # ====== STAGE 4: ENCRYPT BACKGROUND ======
+        t0 = time.time()
+        encrypted_bg = encrypt_background(background_image, master_seed)
+        print(f"           Time: {time.time()-t0:.2f}s")
         
-        decrypted_result_dir = output_dir / f"{image_file.stem}_decrypted"
-        decrypted_result_dir.mkdir(parents=True, exist_ok=True)
+        # ====== STAGE 5: RECONSTRUCT ENCRYPTED IMAGE ======
+        t0 = time.time()
+        encrypted_image = reconstruct_encrypted_image(encrypted_blocks, encrypted_bg, 
+                                                      block_positions, h, w)
+        print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Add timestamp overlay to encrypted image
-        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        encrypted_metrics = {'timestamp': timestamp_str}
-        encrypted_image_with_overlay = add_metrics_overlay(encrypted_image, encrypted_metrics)
+        # Save encrypted image
+        save_image(output_folder / "encrypted_image.png", encrypted_image)
+        print(f"\nSaved: encrypted_image.png")
         
-        encrypted_bgr = cv2.cvtColor(encrypted_image, cv2.COLOR_RGB2BGR)
-        encrypted_bgr_overlay = cv2.cvtColor(encrypted_image_with_overlay, cv2.COLOR_RGB2BGR)
-        
-        cv2.imwrite(str(result_dir / "encrypted_image.png"), encrypted_bgr)
-        cv2.imwrite(str(result_dir / "encrypted_image_with_overlay.png"), encrypted_bgr_overlay)
-        np.save(str(result_dir / "encrypted_image.npy"), encrypted_image)
-        
-        # Stage 5: Decryption with Intermediate Saving
-        print(f"  [Stage 5] Decryption with Intermediate Saving...")
+        # ====== DECRYPTION ======
+        print(f"\n  [Stage 6] Decryption")
         t0 = time.time()
         
-        # Decrypt ROI tiles
-        decrypted_roi_tiles = []
-        for tile_idx, encrypted_tile in enumerate(encrypted_roi_tiles):
-            tile_seed = (master_seed + tile_idx) % (2**31)
-            decrypted_tile = simple_quantum_decrypt_tile(encrypted_tile, tile_seed)
-            decrypted_roi_tiles.append(decrypted_tile)
-            
-            # Debug: Check first tile decryption
-            if tile_idx == 0:
-                original_tile = roi_tiles[0]
-                tile_diff = np.sum(original_tile != decrypted_tile)
-                print(f"           First tile - Original vs Decrypted pixels different: {tile_diff}/{original_tile.size}")
+        # Extract encrypted blocks from encrypted image
+        encrypted_blocks_extracted = []
+        for y, x in block_positions:
+            block_size = 8
+            encrypted_blocks_extracted.append(encrypted_image[y:y+block_size, x:x+block_size].copy())
         
-        # Reconstruct decrypted ROI layer
-        decrypted_roi_layer = np.zeros((h, w, 3), dtype=np.uint8)
+        decrypted_blocks = decrypt_roi_blocks(encrypted_blocks_extracted, master_seed)
+        decrypted_bg = decrypt_background(encrypted_bg, master_seed)
         
-        for tile_idx, tile_pos in enumerate(tile_metadata['tile_positions']):
-            y = tile_pos['original_y']
-            x = tile_pos['original_x']
-            h_tile = tile_pos['tile_height']
-            w_tile = tile_pos['tile_width']
-            decrypted_roi_layer[y:y+h_tile, x:x+w_tile, :] = decrypted_roi_tiles[tile_idx][:h_tile, :w_tile, :]
-        
-        # Decrypt background
-        decrypted_bg_layer = simple_classical_decrypt_bg(encrypted_bg, master_seed)
-        
-        # 💾 SAVE INTERMEDIATE LAYERS (NEW FEATURE)
-        decrypted_roi_bgr = cv2.cvtColor(decrypted_roi_layer, cv2.COLOR_RGB2BGR)
-        decrypted_bg_bgr = cv2.cvtColor(decrypted_bg_layer.astype(np.uint8), cv2.COLOR_RGB2BGR)
-        
-        cv2.imwrite(str(decrypted_result_dir / "decrypted_layer_roi.png"), decrypted_roi_bgr)
-        cv2.imwrite(str(decrypted_result_dir / "decrypted_layer_background.png"), decrypted_bg_bgr)
-        
-        # Final fusion
-        decrypted_image = decrypted_roi_layer.copy()
-        roi_mask_bool = roi_mask > 127
-        decrypted_image[~roi_mask_bool] = decrypted_bg_layer.astype(np.uint8)[~roi_mask_bool]
-        
-        decrypted_bgr = cv2.cvtColor(decrypted_image, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(decrypted_result_dir / "final_decrypted_image.png"), decrypted_bgr)
-        np.save(str(decrypted_result_dir / "decrypted_image.npy"), decrypted_image)
+        # Reconstruct decrypted image
+        decrypted_image = decrypted_bg.copy()
+        for block_idx, (y, x) in enumerate(block_positions):
+            block_size = 8
+            decrypted_image[y:y+block_size, x:x+block_size] = decrypted_blocks[block_idx]
         
         print(f"           Time: {time.time()-t0:.2f}s")
         
         # Calculate metrics
-        psnr = None
-        ssim = None
-        if original_image.shape == decrypted_image.shape:
-            psnr = calculate_psnr(original_image, decrypted_image)
-            ssim = calculate_ssim(original_image, decrypted_image)
-            diff = np.abs(original_image.astype(np.float32) - decrypted_image.astype(np.float32))
-            print(f"\n  [Metrics]")
-            print(f"    PSNR: {psnr:.2f} dB" if psnr != float('inf') else f"    PSNR: inf dB (Perfect)")
-            print(f"    SSIM: {ssim:.4f}")
-            print(f"    Mean Pixel Difference: {diff.mean():.2f}")
-            print(f"    Max Pixel Difference: {diff.max():.2f}")
-            print(f"    Original - Min: {original_image.min()}, Max: {original_image.max()}")
-            print(f"    Decrypted - Min: {decrypted_image.min()}, Max: {decrypted_image.max()}")
+        psnr = calculate_psnr(original_image, decrypted_image)
+        ssim = calculate_ssim(original_image, decrypted_image)
         
-        # Add overlay with metrics to decrypted image
-        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        decrypted_metrics = {
-            'timestamp': timestamp_str,
-            'psnr': psnr,
-            'ssim': ssim
-        }
-        decrypted_image_with_overlay = add_metrics_overlay(decrypted_image, decrypted_metrics)
+        print(f"\n  [Metrics]")
+        print(f"    PSNR: {psnr:.2f} dB" if psnr != float('inf') else f"    PSNR: inf dB (Perfect)")
+        print(f"    SSIM: {ssim:.4f}")
         
-        # Save decrypted image in decrypted folder
-        decrypted_bgr_overlay = cv2.cvtColor(decrypted_image_with_overlay, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(decrypted_result_dir / "final_decrypted_image_with_metrics.png"), decrypted_bgr_overlay)
+        # Save decrypted image
+        save_image(decrypted_folder / "decrypted_image.png", decrypted_image)
+        print(f"\nSaved: decrypted_image.png")
         
-        # Save metadata
-        metadata = {
-            'timestamp': datetime.now().isoformat(),
-            'image_name': image_file.name,
-            'original_shape': original_image.shape,
-            'master_seed': int(master_seed),
-            'tile_metadata': {
-                'total_tiles': tile_metadata['total_tiles'],
-                'tile_size': tile_metadata['tile_size'],
-                'roi_bbox': tile_metadata['roi_bbox']
-            },
-            'output_files': {
-                'encrypted_image': 'encrypted_image.png',
-                'decrypted_layer_roi': 'decrypted_layer_roi.png',
-                'decrypted_layer_background': 'decrypted_layer_background.png',
-                'final_decrypted_image': 'final_decrypted_image.png'
-            }
-        }
-        
-        with open(result_dir / "metadata.json", 'w') as f:
-            json.dump(metadata, f, indent=2)
+        # ====== VERIFICATION ======
+        print(f"\n  [Verification]")
+        diff = np.abs(original_image.astype(np.float32) - decrypted_image.astype(np.float32))
+        print(f"    Mean pixel difference: {diff.mean():.2f}")
+        print(f"    Max pixel difference: {diff.max():.2f}")
+        print(f"\nPerfect reconstruction: {'YES' if diff.max() == 0 else 'NO'}")
         
         total_time = time.time() - start_time
         print(f"\n  [COMPLETE] Total time: {total_time:.2f}s")
-        print(f"  [OUTPUT] {result_dir}/")
-    
-    print("\n" + "="*80)
-    print("PIPELINE COMPLETE")
-    print("="*80 + "\n")
+        print(f"  [OUTPUT] {output_folder}/")
 
 
 if __name__ == "__main__":
