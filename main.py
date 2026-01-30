@@ -141,7 +141,6 @@ def extract_roi_with_8x8_blocking(image: np.ndarray, roi_mask: np.ndarray) -> di
 def encrypt_roi_blocks(roi_blocks: list, master_seed: int) -> tuple:
     """
     Encrypt each 8x8 ROI block using NEQR + quantum scrambling.
-    Only encrypts non-zero pixels within each block.
     Returns encrypted blocks AND the keys for decryption.
     """
     encrypted_blocks = []
@@ -162,8 +161,7 @@ def encrypt_roi_blocks(roi_blocks: list, master_seed: int) -> tuple:
                 seed = (master_seed + block_idx * 3 + ch) % (2**31)
                 np.random.seed(seed)
                 chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-                # Only encrypt non-zero pixels within block
-                encrypted_block[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0).astype(np.uint8)
+                encrypted_block[:, :, ch] = (channel ^ chaos_key)
                 block_key[:, :, ch] = chaos_key
         else:
             # Grayscale block
@@ -171,7 +169,7 @@ def encrypt_roi_blocks(roi_blocks: list, master_seed: int) -> tuple:
             seed = (master_seed + block_idx) % (2**31)
             np.random.seed(seed)
             chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-            encrypted_block = np.where(channel > 0, channel ^ chaos_key, 0).astype(np.uint8)
+            encrypted_block = (channel ^ chaos_key)
             block_key = chaos_key
         
         encrypted_blocks.append(encrypted_block)
@@ -188,7 +186,7 @@ def encrypt_roi_blocks(roi_blocks: list, master_seed: int) -> tuple:
 def encrypt_background(background_image: np.ndarray, master_seed: int) -> np.ndarray:
     """
     Encrypt background using chaos-based encryption (HLSM).
-    Only encrypts non-zero pixels (actual background data).
+    Zero pixels stay zero (they're not ROI).
     """
     print(f"\n  [Stage 4] Chaos Cipher Encryption (Background)")
     
@@ -199,14 +197,14 @@ def encrypt_background(background_image: np.ndarray, master_seed: int) -> np.nda
             seed = (master_seed + ch + 100) % (2**31)
             np.random.seed(seed)
             chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-            # Only encrypt non-zero pixels (actual background, not ROI zeros)
-            encrypted_bg[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0).astype(np.uint8)
+            # Only encrypt non-zero pixels (actual background)
+            encrypted_bg[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0)
     else:
         channel = background_image.astype(np.uint8)
         seed = (master_seed + 100) % (2**31)
         np.random.seed(seed)
         chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-        encrypted_bg = np.where(channel > 0, channel ^ chaos_key, 0).astype(np.uint8)
+        encrypted_bg = np.where(channel > 0, channel ^ chaos_key, 0)
     
     print(f"           Background encrypted")
     return encrypted_bg
@@ -254,13 +252,12 @@ def decrypt_roi_blocks(encrypted_blocks: list, master_seed: int) -> list:
                 seed = (master_seed + block_idx * 3 + ch) % (2**31)
                 np.random.seed(seed)
                 chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-                # Decrypt all pixels uniformly
-                decrypted_block[:, :, ch] = (channel ^ chaos_key).astype(np.uint8)
+                decrypted_block[:, :, ch] = (channel ^ chaos_key)
         else:
             seed = (master_seed + block_idx) % (2**31)
             np.random.seed(seed)
             chaos_key = np.random.randint(0, 256, block.shape, dtype=np.uint8)
-            decrypted_block = (block ^ chaos_key).astype(np.uint8)
+            decrypted_block = (block ^ chaos_key)
         
         decrypted_blocks.append(decrypted_block)
     
@@ -276,16 +273,14 @@ def decrypt_background(encrypted_bg: np.ndarray, master_seed: int) -> np.ndarray
             seed = (master_seed + ch + 100) % (2**31)
             np.random.seed(seed)
             chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-            # Decrypt all pixels uniformly (XOR is self-inverse)
-            decrypted_bg[:, :, ch] = (channel ^ chaos_key).astype(np.uint8)
+            # Only decrypt non-zero pixels
+            decrypted_bg[:, :, ch] = np.where(channel > 0, channel ^ chaos_key, 0)
     else:
         channel = encrypted_bg.astype(np.uint8)
         seed = (master_seed + 100) % (2**31)
         np.random.seed(seed)
         chaos_key = np.random.randint(0, 256, channel.shape, dtype=np.uint8)
-        decrypted_bg = (channel ^ chaos_key).astype(np.uint8)
-    
-    return decrypted_bg
+        decrypted_bg = np.where(channel > 0, channel ^ chaos_key, 0)
     
     return decrypted_bg
 
@@ -437,24 +432,11 @@ def main():
         decrypted_blocks = decrypt_roi_blocks(encrypted_blocks_extracted, master_seed)
         decrypted_bg = decrypt_background(encrypted_bg, master_seed)
         
-        # Reconstruct decrypted image using roi_mask to preserve structure
+        # Reconstruct decrypted image
         decrypted_image = decrypted_bg.copy()
-        roi_binary = extraction_result['roi_mask']
         for block_idx, (y, x) in enumerate(block_positions):
             block_size = 8
-            # Only place decrypted block in ROI areas (where roi_mask > 0)
-            mask_block = roi_binary[y:y+block_size, x:x+block_size]
-            decrypted_block = decrypted_blocks[block_idx]
-            # Copy only where mask indicates ROI
-            if len(decrypted_block.shape) == 3:
-                for ch in range(3):
-                    decrypted_image[y:y+block_size, x:x+block_size, ch] = np.where(
-                        mask_block > 0, decrypted_block[:, :, ch], decrypted_image[y:y+block_size, x:x+block_size, ch]
-                    ).astype(np.uint8)
-            else:
-                decrypted_image[y:y+block_size, x:x+block_size] = np.where(
-                    mask_block > 0, decrypted_block, decrypted_image[y:y+block_size, x:x+block_size]
-                ).astype(np.uint8)
+            decrypted_image[y:y+block_size, x:x+block_size] = decrypted_blocks[block_idx]
         
         print(f"           Time: {time.time()-t0:.2f}s")
         
