@@ -1,21 +1,70 @@
-# Installation Guide
+# Installation & Quick Start Guide
 
 ## System Requirements
 
 ### Hardware
 - **CPU**: Modern multi-core processor (Intel i5+ or AMD Ryzen 5+)
 - **RAM**: Minimum 4GB, recommended 8GB or more
-- **Disk**: 2GB free space (for dependencies + sample images)
-- **GPU**: Optional (for future speedup, not currently utilized)
+- **Disk**: 1GB free space (for dependencies + test images)
+- **GPU**: Optional (Phase 10 will support CUDA acceleration)
 
 ### Operating System
-- ✅ Windows 10/11
+- ✅ Windows 10/11 (tested)
 - ✅ Linux (Ubuntu 18.04+)
 - ✅ macOS (10.14+)
 
 ### Python Version
 - **Required**: Python 3.8 or higher
 - **Recommended**: Python 3.10 or 3.11
+- **Tested with**: Python 3.10
+
+---
+
+## Quick Start (5 minutes)
+
+### 1. Navigate to Project
+
+```bash
+cd c:\image\ security_IEEE
+```
+
+### 2. Activate Virtual Environment
+
+**Windows**:
+```bash
+.venv\Scripts\activate
+```
+
+**Linux/macOS**:
+```bash
+source .venv/bin/activate
+```
+
+### 3. Verify Installation
+
+```bash
+python -c "import numpy, PIL, cryptography; print('✅ All dependencies ready')"
+```
+
+### 4. Run Encryption
+
+```bash
+python main.py
+```
+
+### 5. View Results
+
+```bash
+# Encrypted image:
+dir output\encrypted\encrypted_image.png
+
+# Decrypted image:
+dir output\decrypted\decrypted_image.png
+```
+
+---
+
+## Full Installation Guide
 
 ---
 
