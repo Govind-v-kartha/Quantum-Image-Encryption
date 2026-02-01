@@ -50,6 +50,32 @@ python main_decrypt.py output/encrypted/encrypted_image.png output/metadata/encr
 **Output**:
 - `output/decrypted/decrypted_image.png` - Decrypted image
 
+### View Image Comparison
+
+After running encryption/decryption, view a professional side-by-side comparison of original, encrypted, and decrypted images:
+
+**Method 1: Double-Click (Easiest)**
+1. Navigate to: `output/image_comparison.html`
+2. Double-click to open in your default browser
+3. View the comparison with full metrics
+
+**Method 2: PowerShell Command**
+```powershell
+Start-Process 'output/image_comparison.html'
+```
+
+**Method 3: From Browser**
+- Press `Ctrl+O` in your browser
+- Navigate to `output/image_comparison.html`
+- Click Open
+
+**What You'll See**:
+- Three side-by-side images (Original → Encrypted → Decrypted)
+- Detailed metrics for each image
+- Encryption quality statistics
+- Security features applied
+- Verification status (all checks: ✅ PASS)
+
 ---
 
 ## 🏗️ Architecture
