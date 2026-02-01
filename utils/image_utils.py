@@ -63,19 +63,44 @@ def save_image(image_array: np.ndarray, output_path: str) -> bool:
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         
+        # Validate array
+        if image_array is None:
+            logger.error(f"Image array is None - cannot save to {output_path}")
+            return False
+        
+        if image_array.size == 0:
+            logger.error(f"Image array is empty (size=0) - cannot save to {output_path}")
+            return False
+        
+        if len(image_array.shape) != 3:
+            logger.error(f"Invalid array shape {image_array.shape}, expected (H, W, C) for {output_path}")
+            return False
+        
         # Ensure uint8
         if image_array.dtype != np.uint8:
+            logger.debug(f"Converting from {image_array.dtype} to uint8")
             image_array = np.clip(image_array, 0, 255).astype(np.uint8)
+        
+        # Log array info before save
+        logger.debug(f"Saving image: shape={image_array.shape}, dtype={image_array.dtype}, min={image_array.min()}, max={image_array.max()}")
         
         # Save
         img = Image.fromarray(image_array, mode='RGB')
         img.save(path)
         
-        logger.info(f"Saved image: {output_path}")
+        # Verify file was created and has content
+        saved_size = path.stat().st_size
+        if saved_size == 0:
+            logger.error(f"Image saved but file is empty (0 bytes): {output_path}")
+            return False
+        
+        logger.info(f"Saved image: {output_path} ({saved_size/1024:.2f}KB)")
         return True
     
     except Exception as e:
-        logger.error(f"Failed to save image: {str(e)}")
+        logger.error(f"Failed to save image to {output_path}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 
