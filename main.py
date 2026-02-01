@@ -15,6 +15,11 @@ Pipeline:
 5. Encrypt background with chaos cipher
 6. Display: extracted ROI, background, encrypted results
 7. Decrypt and reconstruct
+
+Recent Updates:
+- Added intermediate folder to save FlexiMo segmentation outputs
+- Saves segmentation mask, ROI, and background images for analysis
+- Organized output structure: encrypted/, decrypted/, intermediate/
 """
 
 import numpy as np
