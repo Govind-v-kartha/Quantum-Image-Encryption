@@ -393,11 +393,22 @@ def main():
         block_positions = extraction_result['block_positions']
         print(f"           Time: {time.time()-t0:.2f}s")
         
-        # Create output folder
+        # Create output folders
         output_folder = output_dir / f"{image_file.stem}_encrypted"
         decrypted_folder = output_dir / f"{image_file.stem}_decrypted"
+        intermediate_folder = output_dir / f"{image_file.stem}_intermediate"
         output_folder.mkdir(parents=True, exist_ok=True)
         decrypted_folder.mkdir(parents=True, exist_ok=True)
+        intermediate_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Save FlexiMo segmentation mask
+        save_image(intermediate_folder / "fleximo_segmentation.png", roi_mask)
+        save_image(intermediate_folder / "roi.png", roi_image)
+        save_image(intermediate_folder / "background.png", background_image)
+        print(f"\nSaved intermediate outputs:")
+        print(f"  - fleximo_segmentation.png")
+        print(f"  - roi.png")
+        print(f"  - background.png")
         
         # ====== STAGE 3: ENCRYPT ROI BLOCKS ======
         t0 = time.time()
