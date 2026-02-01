@@ -1,0 +1,126 @@
+{
+  "system": {
+    "name": "Hybrid Quantum-Classical Image Encryption",
+    "version": "2.0",
+    "mode": "production",
+    "debug": false
+  },
+  
+  "input": {
+    "image_path": "input/test_image.png",
+    "format": "PNG",
+    "dtype": "uint8"
+  },
+  
+  "output": {
+    "encrypted_dir": "output/encrypted",
+    "metadata_dir": "output/metadata",
+    "log_dir": "logs",
+    "save_visualizations": true
+  },
+  
+  "ai_engine": {
+    "enabled": true,
+    "model": "fleximo_vision_transformer",
+    "confidence_threshold": 0.6,
+    "saliency_sigma": 1.5,
+    "entropy_bits": 8,
+    "batch_size": 1
+  },
+  
+  "decision_engine": {
+    "enabled": true,
+    "roi_small_threshold": 0.05,
+    "roi_medium_threshold": 0.20,
+    "roi_large_threshold": 0.50,
+    "confidence_boost_threshold": 0.6,
+    "adaptive_key_lengths": [256, 384, 512],
+    "quantum_circuit_depths": [8, 16, 24, 32]
+  },
+  
+  "quantum_engine": {
+    "enabled": true,
+    "block_size": 8,
+    "qiskit_backend": "aer_simulator",
+    "num_qubits": 14,
+    "position_qubits": 6,
+    "intensity_qubits": 8,
+    "arnold_iterations": 3,
+    "diffusion_layers": 2,
+    "confusion_layers": 2,
+    "simulator_shots": 1024,
+    "enable_gpu": false
+  },
+  
+  "classical_engine": {
+    "enabled": true,
+    "algorithm": "AES-256-GCM",
+    "key_size": 256,
+    "nonce_size": 96,
+    "pbkdf2_iterations": 100000,
+    "permutation_rounds": 2,
+    "hmac_algorithm": "SHA256"
+  },
+  
+  "fusion_engine": {
+    "enabled": true,
+    "overlay_strategy": "random",
+    "pixel_scrambling": true,
+    "boundary_blending": true,
+    "integrity_watermark": true
+  },
+  
+  "metadata_engine": {
+    "enabled": true,
+    "store_roi_mask": true,
+    "store_block_order": true,
+    "store_encryption_keys": true,
+    "store_saliency_map": true,
+    "metadata_encryption": "AES-256-GCM",
+    "compression": "zlib"
+  },
+  
+  "verification_engine": {
+    "enabled": true,
+    "verify_hash": true,
+    "verify_pixels": true,
+    "verify_statistics": true,
+    "verify_blocks": true,
+    "block_sample_ratio": 0.1,
+    "abort_on_failure": true,
+    "entropy_tolerance": 0.5
+  },
+  
+  "advanced_security": {
+    "enabled": true,
+    "noise_resilience": true,
+    "multi_user_mode": false,
+    "differential_privacy": false,
+    "quantum_noise_model": "depolarizing",
+    "noise_level": 0.01
+  },
+  
+  "performance": {
+    "parallel_blocks": true,
+    "num_workers": 4,
+    "gpu_acceleration": false,
+    "batch_encryption": true,
+    "cache_intermediate": true,
+    "memory_limit_mb": 512
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file_output": "logs/system.log",
+    "console_output": true,
+    "detailed_metrics": true
+  },
+  
+  "security": {
+    "allow_plaintext_backup": false,
+    "require_authentication": false,
+    "secure_random_source": "os.urandom",
+    "key_rotation_enabled": false
+  }
+}
