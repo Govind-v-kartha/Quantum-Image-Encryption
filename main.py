@@ -280,7 +280,43 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         logger.info(f"[SUCCESS] ENCRYPTION COMPLETE in {elapsed_time:.2f} seconds")
         logger.info("=" * 80)
         
-        return result
+        # ===== AUTOMATIC DECRYPTION =====
+        logger.info("\n\n" + "=" * 80)
+        logger.info("AUTOMATICALLY STARTING DECRYPTION PIPELINE...")
+        logger.info("=" * 80)
+        
+        # Paths for decryption
+        encrypted_image_path = str(output_path)
+        metadata_path = Path(config.get('output', {}).get('metadata_dir', 'output/metadata')) / "encryption_metadata.json"
+        
+        try:
+            # Import and run decryption
+            from main_decrypt import orchestrate_decryption
+            
+            decrypt_result = orchestrate_decryption(encrypted_image_path, str(metadata_path), config_path)
+            
+            if decrypt_result['success']:
+                logger.info("\n" + "=" * 80)
+                logger.info("[SUCCESS] COMPLETE ENCRYPTION-DECRYPTION CYCLE SUCCESSFUL!")
+                logger.info("=" * 80)
+                logger.info(f"Total time (Encryption + Decryption): {elapsed_time + decrypt_result.get('processing_time', 0):.2f} seconds")
+                logger.info(f"\nEncrypted image:  output/encrypted/encrypted_image.png")
+                logger.info(f"Decrypted image:  output/decrypted/decrypted_image.png")
+                logger.info(f"Metadata file:    output/metadata/encryption_metadata.json")
+                logger.info("=" * 80)
+                
+                result['decryption'] = decrypt_result
+                result['full_cycle'] = True
+                return result
+            else:
+                logger.error(f"Decryption failed: {decrypt_result.get('error', 'Unknown error')}")
+                result['decryption'] = decrypt_result
+                return result
+                
+        except Exception as e:
+            logger.warning(f"Automatic decryption failed: {str(e)}")
+            logger.info("To decrypt later, run: python main_decrypt.py")
+            return result
     
     except Exception as e:
         elapsed_time = time.time() - start_time
@@ -300,10 +336,40 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
 
 def main():
     """Main entry point."""
+    from pathlib import Path
+    
+    # Get image path from command line argument or auto-detect from input folder
     if len(sys.argv) > 1:
         image_path = sys.argv[1]
     else:
-        image_path = "input/test_image.png"
+        # Auto-detect images in input folder
+        input_dir = Path("input")
+        
+        # Look for images in this order: st1.png, test_image.png, or first PNG found
+        preferred_images = ["st1.png", "test_image.png"]
+        image_path = None
+        
+        for preferred in preferred_images:
+            candidate = input_dir / preferred
+            if candidate.exists():
+                image_path = str(candidate)
+                break
+        
+        # If not found, try to find any PNG file
+        if image_path is None:
+            png_files = list(input_dir.glob("*.png"))
+            if png_files:
+                image_path = str(png_files[0])
+                print(f"Auto-detected image: {image_path}")
+            else:
+                print("ERROR: No PNG images found in input folder!")
+                print(f"Available files in input/: {list(input_dir.glob('*'))}")
+                sys.exit(1)
+    
+    # Verify file exists
+    if not Path(image_path).exists():
+        print(f"ERROR: Image file not found: {image_path}")
+        sys.exit(1)
     
     result = orchestrate_encryption(image_path)
     

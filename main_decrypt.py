@@ -290,13 +290,27 @@ def orchestrate_decryption(encrypted_image_path: str, metadata_path: str,
 
 def main():
     """Main entry point for decryption."""
+    from pathlib import Path
+    
+    # Get paths from command line arguments or use defaults
     if len(sys.argv) > 2:
         encrypted_image_path = sys.argv[1]
         metadata_path = sys.argv[2]
     else:
-        # Default paths
+        # Use default paths
         encrypted_image_path = "output/encrypted/encrypted_image.png"
         metadata_path = "output/metadata/encryption_metadata.json"
+    
+    # Verify files exist
+    if not Path(encrypted_image_path).exists():
+        print(f"ERROR: Encrypted image not found: {encrypted_image_path}")
+        print(f"Run main.py first to encrypt an image")
+        sys.exit(1)
+    
+    if not Path(metadata_path).exists():
+        print(f"ERROR: Metadata file not found: {metadata_path}")
+        print(f"Make sure encryption was successful")
+        sys.exit(1)
     
     logger = logging.getLogger('decryption_orchestrator')
     logger.info(f"\nDecrypting: {encrypted_image_path}")
