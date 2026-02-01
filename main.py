@@ -141,8 +141,8 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
     try:
         # ===== EXTRACT INPUT FILENAME FOR DYNAMIC OUTPUT FOLDERS =====
         input_filename = Path(image_path).stem  # Get filename without extension
-        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_encrypted"
-        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_decrypted"
+        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_01_encrypted"
+        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_02_decrypted"
         metadata_dir = Path(config.get('output', {}).get('metadata_dir', 'output/metadata'))
         
         # Create output directories
