@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-02-01T22:46:04.867313",
+  "version": "2.0",
+  "image_shape": [
+    256,
+    256,
+    3
+  ],
+  "block_size": 8,
+  "roi_mask": {
+    "data": "789cedcbb14ec2601486e1bf227171f61a9c48bc05dd6c64f0060885269a4821b51d9a38b8889274e370bd08f4369e275fcef49eefebc3360dfabbaa5d6dbac96cb1aecbc9aafd68dee7753defa2bf9dd5e5625d7d3675bb68621ffdf852467f532d87641f79fa89a7ac88df788dfb3c7b49e76de36dd48f974db729cf6f57ed43ecfe8662d4675f319d4e9f8f279793a7268add634a593a020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0c9619c06d14431f90728fe4c09",
+    "shape": [
+      256,
+      256
+    ],
+    "dtype": "uint8"
+  },
+  "block_assignments": {
+    "default": "FULL_QUANTUM"
+  },
+  "processing_params": {
+    "block_size": 8,
+    "encryption_level": "FULL_QUANTUM"
+  }
+}
