@@ -139,6 +139,20 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
     }
     
     try:
+        # ===== EXTRACT INPUT FILENAME FOR DYNAMIC OUTPUT FOLDERS =====
+        input_filename = Path(image_path).stem  # Get filename without extension
+        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_encrypted"
+        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_decrypted"
+        metadata_dir = Path(config.get('output', {}).get('metadata_dir', 'output/metadata'))
+        
+        # Create output directories
+        encrypted_dir.mkdir(parents=True, exist_ok=True)
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Output folders will be named after input file: {input_filename}")
+        logger.info(f"  Encrypted output: {encrypted_dir}/")
+        logger.info(f"  Decrypted output: {decrypted_dir}/")
+        
         # ===== STEP 1: Load Image =====
         logger.info("\n[STEP 1] Loading image...")
         image = load_image(image_path)
@@ -255,8 +269,7 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         
         # ===== STEP 11: Save Encrypted Image =====
         logger.info("\n[STEP 11] Saving encrypted image...")
-        output_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted'))
-        output_path = output_dir / "encrypted_image.png"
+        output_path = encrypted_dir / "encrypted_image.png"
         
         if save_image(encrypted_image, str(output_path)):
             logger.info(f"  Saved encrypted image to {output_path}")
@@ -287,22 +300,22 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         
         # Paths for decryption
         encrypted_image_path = str(output_path)
-        metadata_path = Path(config.get('output', {}).get('metadata_dir', 'output/metadata')) / "encryption_metadata.json"
+        metadata_path = metadata_dir / "encryption_metadata.json"
         
         try:
             # Import and run decryption
             from main_decrypt import orchestrate_decryption
             
-            decrypt_result = orchestrate_decryption(encrypted_image_path, str(metadata_path), config_path)
+            decrypt_result = orchestrate_decryption(encrypted_image_path, str(metadata_path), config_path, str(decrypted_dir))
             
             if decrypt_result['success']:
                 logger.info("\n" + "=" * 80)
                 logger.info("[SUCCESS] COMPLETE ENCRYPTION-DECRYPTION CYCLE SUCCESSFUL!")
                 logger.info("=" * 80)
                 logger.info(f"Total time (Encryption + Decryption): {elapsed_time + decrypt_result.get('processing_time', 0):.2f} seconds")
-                logger.info(f"\nEncrypted image:  output/encrypted/encrypted_image.png")
-                logger.info(f"Decrypted image:  output/decrypted/decrypted_image.png")
-                logger.info(f"Metadata file:    output/metadata/encryption_metadata.json")
+                logger.info(f"\nEncrypted image:  {encrypted_dir}/encrypted_image.png")
+                logger.info(f"Decrypted image:  {decrypted_dir}/decrypted_image.png")
+                logger.info(f"Metadata file:    {metadata_path}")
                 logger.info("=" * 80)
                 
                 result['decryption'] = decrypt_result

@@ -107,7 +107,7 @@ def initialize_engines(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def orchestrate_decryption(encrypted_image_path: str, metadata_path: str, 
-                          config_path: str = "config.json") -> Dict[str, Any]:
+                          config_path: str = "config.json", decrypted_dir: str = None) -> Dict[str, Any]:
     """
     Main decryption orchestration function.
     Controls the complete decryption pipeline (Reverse of Phases 1-10).
@@ -116,6 +116,7 @@ def orchestrate_decryption(encrypted_image_path: str, metadata_path: str,
         encrypted_image_path: Path to encrypted image
         metadata_path: Path to metadata file
         config_path: Path to config file
+        decrypted_dir: Optional custom output directory for decrypted image
         
     Returns:
         Result dict with decrypted outputs
@@ -245,7 +246,14 @@ def orchestrate_decryption(encrypted_image_path: str, metadata_path: str,
         
         # ===== STEP 12: Save Decrypted Image =====
         logger.info("\n[STEP 12] Saving decrypted image...")
-        output_dir = Path(config.get('output', {}).get('decrypted_dir', 'output/decrypted'))
+        
+        # Use provided decrypted_dir or fall back to config
+        if decrypted_dir:
+            output_dir = Path(decrypted_dir)
+        else:
+            output_dir = Path(config.get('output', {}).get('decrypted_dir', 'output/decrypted'))
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "decrypted_image.png"
         
         if save_image(decrypted_image, str(output_path)):
