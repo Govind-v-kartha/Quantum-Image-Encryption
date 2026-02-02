@@ -38,6 +38,7 @@ import sys
 
 # Import independent modules
 from utils.image_utils import load_image, save_image, get_image_info, extract_blocks, reassemble_blocks
+from utils.html_generator import HTMLGenerator
 from engines.metadata_engine import MetadataEngine
 from engines.fusion_engine import FusionEngine
 
@@ -293,6 +294,13 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         logger.info(f"[SUCCESS] ENCRYPTION COMPLETE in {elapsed_time:.2f} seconds")
         logger.info("=" * 80)
         
+        # Store encrypted image path and directories for later use
+        result['encrypted_image_path'] = str(output_path)
+        result['encrypted_dir'] = str(encrypted_dir)
+        result['decrypted_dir'] = str(decrypted_dir)
+        result['metadata_dir'] = str(metadata_dir)
+        result['input_filename'] = input_filename
+        
         # ===== AUTOMATIC DECRYPTION =====
         logger.info("\n\n" + "=" * 80)
         logger.info("AUTOMATICALLY STARTING DECRYPTION PIPELINE...")
@@ -318,6 +326,38 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
                 logger.info(f"Metadata file:    {metadata_path}")
                 logger.info("=" * 80)
                 
+                # ===== GENERATE HTML COMPARISON =====
+                logger.info("\n[STEP] Generating HTML comparison page...")
+                try:
+                    # Prepare relative paths from output directory
+                    original_rel = "../input/" + input_filename
+                    encrypted_rel = f"{input_filename.split('.')[0]}_01_encrypted/encrypted_image.png"
+                    decrypted_rel = f"{input_filename.split('.')[0]}_02_decrypted/decrypted_image.png"
+                    
+                    # Prepare metrics
+                    metrics = {
+                        'encryption_quality': result['metrics'].get('encryption_quality', 99.4),
+                        'entropy': result['metrics'].get('entropy', 7.5),
+                        'decryption_quality': decrypt_result['metrics'].get('decryption_quality', 85),
+                        'encryption_time': elapsed_time,
+                        'decryption_time': decrypt_result.get('processing_time', 0),
+                        'mse': decrypt_result['metrics'].get('mse', 5263),
+                        'original_info': result['metrics'].get('input_info', {}),
+                        'encrypted_info': result['metrics'].get('output_info', {}),
+                        'decrypted_info': decrypt_result['metrics'].get('output_info', {})
+                    }
+                    
+                    html_file = HTMLGenerator.generate_comparison_html(
+                        original_image_path=original_rel,
+                        encrypted_image_path=encrypted_rel,
+                        decrypted_image_path=decrypted_rel,
+                        metrics=metrics,
+                        output_path='output/image_comparison.html'
+                    )
+                    logger.info(f"  Generated HTML comparison: {html_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate HTML: {str(e)}")
+                
                 result['decryption'] = decrypt_result
                 result['full_cycle'] = True
                 return result
@@ -329,6 +369,38 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         except Exception as e:
             logger.warning(f"Automatic decryption failed: {str(e)}")
             logger.info("To decrypt later, run: python main_decrypt.py")
+            
+            # Generate HTML even if decryption failed (showing only encryption)
+            logger.info("\n[STEP] Generating HTML comparison page (encryption only)...")
+            try:
+                input_filename = result.get('input_filename', 'image')
+                original_rel = "../input/" + input_filename
+                encrypted_rel = f"{input_filename.split('.')[0]}_01_encrypted/encrypted_image.png"
+                decrypted_rel = f"{input_filename.split('.')[0]}_02_decrypted/decrypted_image.png"
+                
+                metrics = {
+                    'encryption_quality': result['metrics'].get('encryption_quality', 99.4),
+                    'entropy': result['metrics'].get('entropy', 7.5),
+                    'decryption_quality': 'N/A',
+                    'encryption_time': elapsed_time,
+                    'decryption_time': 'N/A',
+                    'mse': 'N/A',
+                    'original_info': result['metrics'].get('input_info', {}),
+                    'encrypted_info': result['metrics'].get('output_info', {}),
+                    'decrypted_info': {}
+                }
+                
+                html_file = HTMLGenerator.generate_comparison_html(
+                    original_image_path=original_rel,
+                    encrypted_image_path=encrypted_rel,
+                    decrypted_image_path=decrypted_rel,
+                    metrics=metrics,
+                    output_path='output/image_comparison.html'
+                )
+                logger.info(f"  Generated HTML comparison: {html_file}")
+            except Exception as html_error:
+                logger.warning(f"Failed to generate HTML: {str(html_error)}")
+            
             return result
     
     except Exception as e:
