@@ -390,6 +390,18 @@ def main():
         logger = logging.getLogger('orchestrator')
         logger.info("\nPipeline executed successfully!")
         logger.info(f"Metrics: {result['metrics']}")
+        
+        # Open HTML comparison in browser
+        try:
+            import webbrowser
+            html_file = Path('output/image_comparison.html').resolve()
+            if html_file.exists():
+                logger.info(f"\nOpening HTML comparison: {html_file}")
+                webbrowser.open(f'file://{html_file}')
+            else:
+                logger.warning(f"HTML comparison file not found: {html_file}")
+        except Exception as e:
+            logger.warning(f"Could not open HTML in browser: {str(e)}")
     else:
         logger = logging.getLogger('orchestrator')
         logger.error(f"\nPipeline failed: {result['error']}")
