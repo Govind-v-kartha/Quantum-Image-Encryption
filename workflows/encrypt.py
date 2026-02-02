@@ -141,16 +141,17 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
     
     try:
         # ===== EXTRACT INPUT FILENAME FOR DYNAMIC OUTPUT FOLDERS =====
-        input_filename = Path(image_path).stem  # Get filename without extension
-        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_01_encrypted"
-        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename}_02_decrypted"
+        input_filename_stem = Path(image_path).stem  # Get filename without extension
+        input_filename_full = Path(image_path).name  # Get full filename with extension
+        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename_stem}_01_encrypted"
+        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename_stem}_02_decrypted"
         metadata_dir = Path(config.get('output', {}).get('metadata_dir', 'output/metadata'))
         
         # Create output directories
         encrypted_dir.mkdir(parents=True, exist_ok=True)
         metadata_dir.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"Output folders will be named after input file: {input_filename}")
+        logger.info(f"Output folders will be named after input file: {input_filename_stem}")
         logger.info(f"  Encrypted output: {encrypted_dir}/")
         logger.info(f"  Decrypted output: {decrypted_dir}/")
         
@@ -299,7 +300,8 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         result['encrypted_dir'] = str(encrypted_dir)
         result['decrypted_dir'] = str(decrypted_dir)
         result['metadata_dir'] = str(metadata_dir)
-        result['input_filename'] = input_filename
+        result['input_filename_stem'] = input_filename_stem
+        result['input_filename_full'] = input_filename_full
         
         # ===== AUTOMATIC DECRYPTION =====
         logger.info("\n\n" + "=" * 80)
@@ -330,9 +332,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
                 logger.info("\n[STEP] Generating HTML comparison page...")
                 try:
                     # Prepare relative paths from output directory
-                    original_rel = "../input/" + input_filename
-                    encrypted_rel = f"{input_filename.split('.')[0]}_01_encrypted/encrypted_image.png"
-                    decrypted_rel = f"{input_filename.split('.')[0]}_02_decrypted/decrypted_image.png"
+                    input_filename_stem = result.get('input_filename_stem', 'image')
+                    input_filename_full = result.get('input_filename_full', 'image.png')
+                    original_rel = "../input/" + input_filename_full
+                    encrypted_rel = f"{input_filename_stem}_01_encrypted/encrypted_image.png"
+                    decrypted_rel = f"{input_filename_stem}_02_decrypted/decrypted_image.png"
                     
                     # Prepare metrics
                     metrics = {
@@ -373,10 +377,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
             # Generate HTML even if decryption failed (showing only encryption)
             logger.info("\n[STEP] Generating HTML comparison page (encryption only)...")
             try:
-                input_filename = result.get('input_filename', 'image')
-                original_rel = "../input/" + input_filename
-                encrypted_rel = f"{input_filename.split('.')[0]}_01_encrypted/encrypted_image.png"
-                decrypted_rel = f"{input_filename.split('.')[0]}_02_decrypted/decrypted_image.png"
+                input_filename_stem = result.get('input_filename_stem', 'image')
+                input_filename_full = result.get('input_filename_full', 'image.png')
+                original_rel = "../input/" + input_filename_full
+                encrypted_rel = f"{input_filename_stem}_01_encrypted/encrypted_image.png"
+                decrypted_rel = f"{input_filename_stem}_02_decrypted/decrypted_image.png"
                 
                 metrics = {
                     'encryption_quality': result['metrics'].get('encryption_quality', 99.4),
