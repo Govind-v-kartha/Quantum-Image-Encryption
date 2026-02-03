@@ -16,6 +16,7 @@ class AIEngine:
     """
     AI-powered semantic segmentation engine.
     Detects regions of interest (ROI) in satellite/aerial imagery.
+    Uses FlexiMo Vision Transformer for true semantic understanding.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -29,9 +30,11 @@ class AIEngine:
         self.logger = logging.getLogger('ai_engine')
         self.is_initialized = False
         
-        # Try to import FlexiMo from cloned repository
+        # FlexiMo model and weights
         self.use_fleximo = False
         self.fleximo_module = None
+        self.fleximo_model = None
+        self.device = 'cpu'
         
         try:
             # Try to import from fleximo_repo that was cloned
@@ -39,10 +42,44 @@ class AIEngine:
             self.fleximo_module = fleximo_repo
             self.logger.info("✓ FlexiMo repository module imported successfully")
             self.use_fleximo = True
+            
+            # Try to load FlexiMo model
+            try:
+                import torch
+                self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                self.logger.info(f"  Using device: {self.device}")
+                
+                # Attempt to load FlexiMo model
+                self._load_fleximo_model()
+            except ImportError:
+                self.logger.warning("PyTorch not available, will use fallback segmentation")
+                self.use_fleximo = False
+                
         except ImportError as e:
             self.logger.warning(f"Could not import fleximo_repo: {e}")
-            self.logger.warning("Using fallback dummy segmentation")
+            self.logger.warning("Using fallback contrast-based segmentation")
             self.use_fleximo = False
+    
+    def _load_fleximo_model(self):
+        """Load FlexiMo pretrained model."""
+        try:
+            import torch
+            from fleximo_repo.fleximo.models_dwv import get_model
+            
+            # Try to load model (this requires weights to be available)
+            model_config = self.config.get('model_config', 'dwv_vit_base')
+            pretrained = self.config.get('pretrained', True)
+            
+            self.logger.info(f"Loading FlexiMo model: {model_config}")
+            self.fleximo_model = get_model(model_config, pretrained=pretrained)
+            self.fleximo_model = self.fleximo_model.to(self.device)
+            self.fleximo_model.eval()
+            self.logger.info("✓ FlexiMo model loaded successfully")
+            
+        except Exception as e:
+            self.logger.warning(f"Could not load FlexiMo model: {e}")
+            self.logger.warning("Will use fallback segmentation")
+            self.fleximo_model = None
     
     def initialize(self):
         """Initialize engine and prepare for processing."""
@@ -78,25 +115,76 @@ class AIEngine:
             return np.ones((image.shape[0], image.shape[1]), dtype=np.uint8) * 255
         
         try:
-            if self.use_fleximo and self.fleximo_module:
-                # Use FlexiMo from cloned repository
-                self.logger.info(f"Running FlexiMo segmentation (from cloned repo) on {image.shape}")
-                
-                # Call FlexiMo function from repo if available
-                try:
-                    from fleximo_repo import segment_image_fleximo
-                    roi_mask = segment_image_fleximo(image)
-                    self.logger.info(f"✓ FlexiMo segmentation completed")
-                    return roi_mask
-                except (ImportError, AttributeError):
-                    self.logger.warning("FlexiMo function not directly callable, using fallback")
-                    return self._fallback_segmentation(image)
+            # Try FlexiMo semantic segmentation first
+            if self.use_fleximo and self.fleximo_model is not None:
+                return self._segment_with_fleximo(image)
             else:
-                # Fallback: simple edge-based segmentation
+                # Fallback: contrast-based segmentation
                 return self._fallback_segmentation(image)
         
         except Exception as e:
             self.logger.error(f"Segmentation failed: {str(e)}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return self._fallback_segmentation(image)
+    
+    def _segment_with_fleximo(self, image: np.ndarray) -> np.ndarray:
+        """
+        Semantic segmentation using FlexiMo Vision Transformer.
+        
+        Args:
+            image: Input image (H, W, 3) uint8
+            
+        Returns:
+            ROI mask (H, W) uint8: 255 for ROI, 0 for background
+        """
+        try:
+            import torch
+            from torchvision import transforms
+            
+            self.logger.info(f"Running FlexiMo semantic segmentation on {image.shape}")
+            
+            # Normalize image to [0, 1] and prepare for model
+            if len(image.shape) == 3:
+                img_tensor = torch.from_numpy(image).float() / 255.0
+                img_tensor = img_tensor.permute(2, 0, 1)  # HWC -> CHW
+            else:
+                img_tensor = torch.from_numpy(image).float() / 255.0
+                img_tensor = img_tensor.unsqueeze(0)  # Add channel
+            
+            # Add batch dimension
+            img_tensor = img_tensor.unsqueeze(0)  # BCHW
+            img_tensor = img_tensor.to(self.device)
+            
+            # Run inference
+            with torch.no_grad():
+                output = self.fleximo_model(img_tensor)
+            
+            # Convert output to mask
+            if isinstance(output, torch.Tensor):
+                if len(output.shape) == 4:  # BCHW
+                    output = output.squeeze(0).squeeze(0)  # Remove batch and channel
+                elif len(output.shape) == 3:  # CHW
+                    output = output.squeeze(0)  # Remove channel
+                
+                # Convert to numpy and threshold
+                mask = output.cpu().numpy().astype(np.float32)
+                
+                # Normalize to 0-1 range
+                mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
+                
+                # Apply threshold to get binary mask
+                threshold = self.config.get('fleximo_threshold', 0.5)
+                roi_mask = (mask > threshold).astype(np.uint8) * 255
+                
+                self.logger.info(f"✓ FlexiMo ROI Detection: {np.count_nonzero(roi_mask > 0)} / {roi_mask.size} pixels")
+                return roi_mask
+            else:
+                self.logger.warning("FlexiMo output format unexpected")
+                return self._fallback_segmentation(image)
+        
+        except Exception as e:
+            self.logger.warning(f"FlexiMo segmentation failed: {str(e)}, using fallback")
             return self._fallback_segmentation(image)
     
     def _fallback_segmentation(self, image: np.ndarray) -> np.ndarray:

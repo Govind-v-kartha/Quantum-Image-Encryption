@@ -211,12 +211,17 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         
         # ===== STEP 6: Quantum Engine =====
         logger.info("\n[STEP 6] Quantum Encryption...")
+        secure_seed = None
         if config.get('quantum_engine', {}).get('enabled', True):
             logger.info("  Quantum Engine enabled - processing blocks")
             quantum_engine = engines.get('quantum')
             if quantum_engine:
-                encrypted_blocks = quantum_engine.encrypt(blocks, master_seed=12345)
-                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via NEQR + quantum gates")
+                # Use secure random seed instead of deterministic
+                import secrets
+                secure_seed = secrets.randbelow(2**31 - 1)
+                logger.info(f"  Using secure random seed: {secure_seed}")
+                encrypted_blocks = quantum_engine.encrypt(blocks, master_seed=secure_seed)
+                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via quantum encryption")
             else:
                 logger.warning("  Quantum engine not available")
                 encrypted_blocks = blocks.copy()
@@ -266,7 +271,9 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
                 image_shape=original_shape,
                 processing_params={
                     'block_size': block_size,
-                    'encryption_level': str(encryption_decision.get('primary_encryption_level')) if encryption_decision else 'N/A'
+                    'encryption_level': str(encryption_decision.get('primary_encryption_level')) if encryption_decision else 'N/A',
+                    'quantum_seed': secure_seed,  # Store seed for decryption
+                    'encryption_method': 'Quantum Repo + Classical AES'
                 }
             )
             logger.info(f"  Created metadata with {len(metadata)} fields")

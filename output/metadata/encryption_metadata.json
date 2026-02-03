@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-03T14:23:16.248707",
+  "timestamp": "2026-02-03T14:34:02.703781",
   "version": "2.0",
   "image_shape": [
     784,
@@ -20,6 +20,8 @@
   },
   "processing_params": {
     "block_size": 8,
-    "encryption_level": "FULL_QUANTUM"
+    "encryption_level": "FULL_QUANTUM",
+    "quantum_seed": 1776868459,
+    "encryption_method": "Quantum Repo + Classical AES"
   }
 }

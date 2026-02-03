@@ -3166,3 +3166,219 @@ Pipeline executed successfully!
 2026-02-03 19:53:16,372 - orchestrator - INFO - Metrics: {'verification_passed': True, 'input_info': {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}, 'output_info': {'shape': (784, 1384, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 126.91369723467422, 'std': 68.62983297936948, 'size_bytes': 3255168}, 'entropy': 7.562450957572984}
 2026-02-03 19:53:16,375 - orchestrator - INFO - 
 Opening HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:02:08,762 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:08,762 - orchestrator - INFO - HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION - ORCHESTRATOR (PHASES 1-10)
+2026-02-03 20:02:08,762 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:08,763 - orchestrator - INFO - Output folders will be named after input file: st1
+2026-02-03 20:02:08,763 - orchestrator - INFO -   Encrypted output: output\st1_01_encrypted/
+2026-02-03 20:02:08,763 - orchestrator - INFO -   Decrypted output: output\st1_02_decrypted/
+2026-02-03 20:02:08,763 - orchestrator - INFO - 
+[STEP 1] Loading image...
+2026-02-03 20:02:08,826 - orchestrator - INFO -   Image shape: (791, 1386, 3)
+2026-02-03 20:02:08,843 - orchestrator - INFO -   Image info: {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}
+2026-02-03 20:02:08,843 - orchestrator - INFO - 
+[STEP 2] Initializing engines...
+2026-02-03 20:02:08,844 - orchestrator - INFO - Initializing engines...
+2026-02-03 20:02:08,844 - orchestrator - INFO - Initialized 4 engines
+2026-02-03 20:02:08,844 - orchestrator - INFO - 
+[STEP 3] AI Semantic Segmentation...
+2026-02-03 20:02:08,844 - orchestrator - INFO -   AI Engine enabled - calling semantic segmentation
+2026-02-03 20:02:08,844 - orchestrator - INFO -   ROI mask shape: (791, 1386)
+2026-02-03 20:02:08,844 - orchestrator - INFO - 
+[STEP 4] Making encryption decisions...
+2026-02-03 20:02:08,844 - orchestrator - INFO -   Decision Engine enabled - calling adaptive allocation
+2026-02-03 20:02:08,845 - orchestrator - INFO -   Encryption decision: FULL_QUANTUM
+2026-02-03 20:02:08,845 - orchestrator - INFO - 
+[STEP 5] Extracting blocks...
+2026-02-03 20:02:08,846 - orchestrator - INFO -   Extracted 16954 blocks of size 8x8
+2026-02-03 20:02:08,846 - orchestrator - INFO - 
+[STEP 6] Quantum Encryption...
+2026-02-03 20:02:08,846 - orchestrator - INFO -   Quantum Engine enabled - processing blocks
+2026-02-03 20:02:08,852 - orchestrator - INFO -   Using secure random seed: 116716907
+2026-02-03 20:02:16,547 - orchestrator - INFO -   Encrypted 16954 blocks via quantum encryption
+2026-02-03 20:02:16,547 - orchestrator - INFO - 
+[STEP 7] Classical Encryption...
+2026-02-03 20:02:16,547 - orchestrator - INFO -   Classical Engine enabled - applying AES-256-GCM
+2026-02-03 20:02:16,549 - orchestrator - INFO -   Applied AES-256-GCM to 16954 blocks
+2026-02-03 20:02:16,549 - orchestrator - INFO - 
+[STEP 8] Fusing encrypted blocks...
+2026-02-03 20:02:16,844 - orchestrator - INFO -   Fused image shape: (784, 1384, 3)
+2026-02-03 20:02:16,845 - orchestrator - INFO - 
+[STEP 9] Creating and storing metadata...
+2026-02-03 20:02:16,849 - orchestrator - INFO -   Created metadata with 7 fields
+2026-02-03 20:02:16,850 - orchestrator - INFO -   Saved metadata to output\metadata\encryption_metadata.json
+2026-02-03 20:02:16,850 - orchestrator - INFO - 
+[STEP 10] Integrity Verification...
+2026-02-03 20:02:16,850 - orchestrator - INFO -   Verification Engine enabled
+2026-02-03 20:02:16,850 - orchestrator - INFO -   Hash check: [OK]
+2026-02-03 20:02:16,850 - orchestrator - INFO -   Pixel equality: [OK]
+2026-02-03 20:02:16,850 - orchestrator - INFO -   Statistics: [OK]
+2026-02-03 20:02:16,850 - orchestrator - INFO - 
+[STEP 11] Saving encrypted image...
+2026-02-03 20:02:16,931 - orchestrator - INFO -   Saved encrypted image to output\st1_01_encrypted\encrypted_image.png
+2026-02-03 20:02:16,931 - orchestrator - INFO - 
+[STEP 12] Collecting metrics...
+2026-02-03 20:02:16,966 - orchestrator - INFO -   Entropy: 7.562 bits
+2026-02-03 20:02:16,966 - orchestrator - INFO - 
+================================================================================
+2026-02-03 20:02:16,966 - orchestrator - INFO - [SUCCESS] ENCRYPTION COMPLETE in 8.20 seconds
+2026-02-03 20:02:16,966 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:16,966 - orchestrator - INFO - 
+
+================================================================================
+2026-02-03 20:02:16,966 - orchestrator - INFO - AUTOMATICALLY STARTING DECRYPTION PIPELINE...
+2026-02-03 20:02:16,966 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:16,967 - orchestrator - WARNING - Automatic decryption failed: No module named 'main_decrypt'
+2026-02-03 20:02:16,967 - orchestrator - INFO - To decrypt later, run: python main_decrypt.py
+2026-02-03 20:02:16,967 - orchestrator - INFO - 
+[STEP] Generating HTML comparison page (encryption only)...
+2026-02-03 20:02:16,967 - orchestrator - INFO -   Generated HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:02:16,968 - orchestrator - INFO - 
+Pipeline executed successfully!
+2026-02-03 20:02:16,968 - orchestrator - INFO - Metrics: {'verification_passed': True, 'input_info': {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}, 'output_info': {'shape': (784, 1384, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 126.90573297599387, 'std': 68.55551973490965, 'size_bytes': 3255168}, 'entropy': 7.562450957572984}
+2026-02-03 20:02:16,970 - orchestrator - INFO - 
+Opening HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:02:39,027 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:39,027 - orchestrator - INFO - HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION - ORCHESTRATOR (PHASES 1-10)
+2026-02-03 20:02:39,027 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:39,028 - orchestrator - INFO - Output folders will be named after input file: st1
+2026-02-03 20:02:39,028 - orchestrator - INFO -   Encrypted output: output\st1_01_encrypted/
+2026-02-03 20:02:39,028 - orchestrator - INFO -   Decrypted output: output\st1_02_decrypted/
+2026-02-03 20:02:39,028 - orchestrator - INFO - 
+[STEP 1] Loading image...
+2026-02-03 20:02:39,090 - orchestrator - INFO -   Image shape: (791, 1386, 3)
+2026-02-03 20:02:39,107 - orchestrator - INFO -   Image info: {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}
+2026-02-03 20:02:39,107 - orchestrator - INFO - 
+[STEP 2] Initializing engines...
+2026-02-03 20:02:39,107 - orchestrator - INFO - Initializing engines...
+2026-02-03 20:02:39,107 - orchestrator - INFO - Initialized 4 engines
+2026-02-03 20:02:39,108 - orchestrator - INFO - 
+[STEP 3] AI Semantic Segmentation...
+2026-02-03 20:02:39,108 - orchestrator - INFO -   AI Engine enabled - calling semantic segmentation
+2026-02-03 20:02:39,109 - orchestrator - INFO -   ROI mask shape: (791, 1386)
+2026-02-03 20:02:39,109 - orchestrator - INFO - 
+[STEP 4] Making encryption decisions...
+2026-02-03 20:02:39,109 - orchestrator - INFO -   Decision Engine enabled - calling adaptive allocation
+2026-02-03 20:02:39,109 - orchestrator - INFO -   Encryption decision: FULL_QUANTUM
+2026-02-03 20:02:39,109 - orchestrator - INFO - 
+[STEP 5] Extracting blocks...
+2026-02-03 20:02:39,111 - orchestrator - INFO -   Extracted 16954 blocks of size 8x8
+2026-02-03 20:02:39,111 - orchestrator - INFO - 
+[STEP 6] Quantum Encryption...
+2026-02-03 20:02:39,111 - orchestrator - INFO -   Quantum Engine enabled - processing blocks
+2026-02-03 20:02:39,116 - orchestrator - INFO -   Using secure random seed: 1715118810
+2026-02-03 20:02:58,896 - orchestrator - INFO -   Encrypted 16954 blocks via quantum encryption
+2026-02-03 20:02:58,896 - orchestrator - INFO - 
+[STEP 7] Classical Encryption...
+2026-02-03 20:02:58,896 - orchestrator - INFO -   Classical Engine enabled - applying AES-256-GCM
+2026-02-03 20:02:58,897 - orchestrator - INFO -   Applied AES-256-GCM to 16954 blocks
+2026-02-03 20:02:58,897 - orchestrator - INFO - 
+[STEP 8] Fusing encrypted blocks...
+2026-02-03 20:02:59,193 - orchestrator - INFO -   Fused image shape: (784, 1384, 3)
+2026-02-03 20:02:59,193 - orchestrator - INFO - 
+[STEP 9] Creating and storing metadata...
+2026-02-03 20:02:59,198 - orchestrator - INFO -   Created metadata with 7 fields
+2026-02-03 20:02:59,198 - orchestrator - INFO -   Saved metadata to output\metadata\encryption_metadata.json
+2026-02-03 20:02:59,199 - orchestrator - INFO - 
+[STEP 10] Integrity Verification...
+2026-02-03 20:02:59,199 - orchestrator - INFO -   Verification Engine enabled
+2026-02-03 20:02:59,199 - orchestrator - INFO -   Hash check: [OK]
+2026-02-03 20:02:59,199 - orchestrator - INFO -   Pixel equality: [OK]
+2026-02-03 20:02:59,199 - orchestrator - INFO -   Statistics: [OK]
+2026-02-03 20:02:59,199 - orchestrator - INFO - 
+[STEP 11] Saving encrypted image...
+2026-02-03 20:02:59,282 - orchestrator - INFO -   Saved encrypted image to output\st1_01_encrypted\encrypted_image.png
+2026-02-03 20:02:59,282 - orchestrator - INFO - 
+[STEP 12] Collecting metrics...
+2026-02-03 20:02:59,315 - orchestrator - INFO -   Entropy: 7.562 bits
+2026-02-03 20:02:59,316 - orchestrator - INFO - 
+================================================================================
+2026-02-03 20:02:59,316 - orchestrator - INFO - [SUCCESS] ENCRYPTION COMPLETE in 20.29 seconds
+2026-02-03 20:02:59,316 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:59,316 - orchestrator - INFO - 
+
+================================================================================
+2026-02-03 20:02:59,316 - orchestrator - INFO - AUTOMATICALLY STARTING DECRYPTION PIPELINE...
+2026-02-03 20:02:59,316 - orchestrator - INFO - ================================================================================
+2026-02-03 20:02:59,316 - orchestrator - WARNING - Automatic decryption failed: No module named 'main_decrypt'
+2026-02-03 20:02:59,316 - orchestrator - INFO - To decrypt later, run: python main_decrypt.py
+2026-02-03 20:02:59,316 - orchestrator - INFO - 
+[STEP] Generating HTML comparison page (encryption only)...
+2026-02-03 20:02:59,317 - orchestrator - INFO -   Generated HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:02:59,318 - orchestrator - INFO - 
+Pipeline executed successfully!
+2026-02-03 20:02:59,318 - orchestrator - INFO - Metrics: {'verification_passed': True, 'input_info': {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}, 'output_info': {'shape': (784, 1384, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 126.87248553684479, 'std': 68.59014309857339, 'size_bytes': 3255168}, 'entropy': 7.562450957572984}
+2026-02-03 20:02:59,320 - orchestrator - INFO - 
+Opening HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:03:55,397 - orchestrator - INFO - ================================================================================
+2026-02-03 20:03:55,397 - orchestrator - INFO - HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION - ORCHESTRATOR (PHASES 1-10)
+2026-02-03 20:03:55,397 - orchestrator - INFO - ================================================================================
+2026-02-03 20:03:55,398 - orchestrator - INFO - Output folders will be named after input file: st1
+2026-02-03 20:03:55,398 - orchestrator - INFO -   Encrypted output: output\st1_01_encrypted/
+2026-02-03 20:03:55,398 - orchestrator - INFO -   Decrypted output: output\st1_02_decrypted/
+2026-02-03 20:03:55,398 - orchestrator - INFO - 
+[STEP 1] Loading image...
+2026-02-03 20:03:55,455 - orchestrator - INFO -   Image shape: (791, 1386, 3)
+2026-02-03 20:03:55,472 - orchestrator - INFO -   Image info: {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}
+2026-02-03 20:03:55,472 - orchestrator - INFO - 
+[STEP 2] Initializing engines...
+2026-02-03 20:03:55,472 - orchestrator - INFO - Initializing engines...
+2026-02-03 20:03:55,472 - orchestrator - INFO - Initialized 4 engines
+2026-02-03 20:03:55,472 - orchestrator - INFO - 
+[STEP 3] AI Semantic Segmentation...
+2026-02-03 20:03:55,472 - orchestrator - INFO -   AI Engine enabled - calling semantic segmentation
+2026-02-03 20:03:55,473 - orchestrator - INFO -   ROI mask shape: (791, 1386)
+2026-02-03 20:03:55,473 - orchestrator - INFO - 
+[STEP 4] Making encryption decisions...
+2026-02-03 20:03:55,473 - orchestrator - INFO -   Decision Engine enabled - calling adaptive allocation
+2026-02-03 20:03:55,473 - orchestrator - INFO -   Encryption decision: FULL_QUANTUM
+2026-02-03 20:03:55,473 - orchestrator - INFO - 
+[STEP 5] Extracting blocks...
+2026-02-03 20:03:55,475 - orchestrator - INFO -   Extracted 16954 blocks of size 8x8
+2026-02-03 20:03:55,475 - orchestrator - INFO - 
+[STEP 6] Quantum Encryption...
+2026-02-03 20:03:55,475 - orchestrator - INFO -   Quantum Engine enabled - processing blocks
+2026-02-03 20:03:55,480 - orchestrator - INFO -   Using secure random seed: 1776868459
+2026-02-03 20:04:02,400 - orchestrator - INFO -   Encrypted 16954 blocks via quantum encryption
+2026-02-03 20:04:02,400 - orchestrator - INFO - 
+[STEP 7] Classical Encryption...
+2026-02-03 20:04:02,400 - orchestrator - INFO -   Classical Engine enabled - applying AES-256-GCM
+2026-02-03 20:04:02,402 - orchestrator - INFO -   Applied AES-256-GCM to 16954 blocks
+2026-02-03 20:04:02,402 - orchestrator - INFO - 
+[STEP 8] Fusing encrypted blocks...
+2026-02-03 20:04:02,703 - orchestrator - INFO -   Fused image shape: (784, 1384, 3)
+2026-02-03 20:04:02,703 - orchestrator - INFO - 
+[STEP 9] Creating and storing metadata...
+2026-02-03 20:04:02,708 - orchestrator - INFO -   Created metadata with 7 fields
+2026-02-03 20:04:02,709 - orchestrator - INFO -   Saved metadata to output\metadata\encryption_metadata.json
+2026-02-03 20:04:02,709 - orchestrator - INFO - 
+[STEP 10] Integrity Verification...
+2026-02-03 20:04:02,709 - orchestrator - INFO -   Verification Engine enabled
+2026-02-03 20:04:02,709 - orchestrator - INFO -   Hash check: [OK]
+2026-02-03 20:04:02,709 - orchestrator - INFO -   Pixel equality: [OK]
+2026-02-03 20:04:02,709 - orchestrator - INFO -   Statistics: [OK]
+2026-02-03 20:04:02,709 - orchestrator - INFO - 
+[STEP 11] Saving encrypted image...
+2026-02-03 20:04:02,791 - orchestrator - INFO -   Saved encrypted image to output\st1_01_encrypted\encrypted_image.png
+2026-02-03 20:04:02,791 - orchestrator - INFO - 
+[STEP 12] Collecting metrics...
+2026-02-03 20:04:02,824 - orchestrator - INFO -   Entropy: 7.562 bits
+2026-02-03 20:04:02,825 - orchestrator - INFO - 
+================================================================================
+2026-02-03 20:04:02,825 - orchestrator - INFO - [SUCCESS] ENCRYPTION COMPLETE in 7.43 seconds
+2026-02-03 20:04:02,825 - orchestrator - INFO - ================================================================================
+2026-02-03 20:04:02,825 - orchestrator - INFO - 
+
+================================================================================
+2026-02-03 20:04:02,825 - orchestrator - INFO - AUTOMATICALLY STARTING DECRYPTION PIPELINE...
+2026-02-03 20:04:02,825 - orchestrator - INFO - ================================================================================
+2026-02-03 20:04:02,825 - orchestrator - WARNING - Automatic decryption failed: No module named 'main_decrypt'
+2026-02-03 20:04:02,825 - orchestrator - INFO - To decrypt later, run: python main_decrypt.py
+2026-02-03 20:04:02,825 - orchestrator - INFO - 
+[STEP] Generating HTML comparison page (encryption only)...
+2026-02-03 20:04:02,826 - orchestrator - INFO -   Generated HTML comparison: C:\image security_IEEE\output\image_comparison.html
+2026-02-03 20:04:02,826 - orchestrator - INFO - 
+Pipeline executed successfully!
+2026-02-03 20:04:02,827 - orchestrator - INFO - Metrics: {'verification_passed': True, 'input_info': {'shape': (791, 1386, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 151.2617046997578, 'std': 34.89955721960358, 'size_bytes': 3288978}, 'output_info': {'shape': (784, 1384, 3), 'dtype': 'uint8', 'min': 0, 'max': 255, 'mean': 126.89045235146081, 'std': 68.64779512297258, 'size_bytes': 3255168}, 'entropy': 7.562450957572984}
+2026-02-03 20:04:02,828 - orchestrator - INFO - 
+Opening HTML comparison: C:\image security_IEEE\output\image_comparison.html
