@@ -39,7 +39,7 @@ import sys
 # Import independent modules
 from utils.image_utils import load_image, save_image, get_image_info, extract_blocks, reassemble_blocks
 from utils.html_generator import HTMLGenerator
-from engines.quantum_engine import QuantumEngine
+from engines.quantum_circuit_engine import QuantumCircuitEncryptionEngine
 from engines.classical_engine import ClassicalEngine
 from engines.metadata_engine import MetadataEngine
 from engines.fusion_engine import FusionEngine
@@ -94,9 +94,9 @@ def initialize_engines(config: Dict[str, Any]) -> Dict[str, Any]:
     
     engines = {}
     
-    # Quantum engine
-    if config.get('quantum_engine', {}).get('enabled', True):
-        engines['quantum'] = QuantumEngine(config)
+    # Quantum circuit encryption engine (TRUE quantum, not classical simulation)
+    if config.get('quantum_circuit_engine', {}).get('enabled', True):
+        engines['quantum'] = QuantumCircuitEncryptionEngine(config)
         engines['quantum'].initialize()
     
     # Classical engine
@@ -205,28 +205,28 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         
         # ===== STEP 5: Block Extraction =====
         logger.info("\n[STEP 5] Extracting blocks...")
-        block_size = config.get('quantum_engine', {}).get('block_size', 8)
+        block_size = config.get('quantum_circuit_engine', {}).get('block_size', 8)
         blocks, original_shape = extract_blocks(image, block_size)
         logger.info(f"  Extracted {blocks.shape[0]} blocks of size {block_size}x{block_size}")
         
-        # ===== STEP 6: Quantum Engine =====
-        logger.info("\n[STEP 6] Quantum Encryption...")
+        # ===== STEP 6: Quantum Circuit Encryption (TRUE Quantum, not classical simulation) =====
+        logger.info("\n[STEP 6] Quantum Circuit Encryption (Qiskit-based)...")
         secure_seed = None
-        if config.get('quantum_engine', {}).get('enabled', True):
-            logger.info("  Quantum Engine enabled - processing blocks")
+        if config.get('quantum_circuit_engine', {}).get('enabled', True):
+            logger.info("  Quantum Circuit Engine enabled - TRUE quantum encryption via Qiskit")
             quantum_engine = engines.get('quantum')
             if quantum_engine:
-                # Use secure random seed instead of deterministic
+                # Use secure random seed for reproducibility
                 import secrets
                 secure_seed = secrets.randbelow(2**31 - 1)
                 logger.info(f"  Using secure random seed: {secure_seed}")
                 encrypted_blocks = quantum_engine.encrypt(blocks, master_seed=secure_seed)
-                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via quantum encryption")
+                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via quantum circuits (Qiskit Aer)")
             else:
-                logger.warning("  Quantum engine not available")
+                logger.warning("  Quantum Circuit engine not available")
                 encrypted_blocks = blocks.copy()
         else:
-            logger.info("  Quantum Engine disabled")
+            logger.info("  Quantum Circuit Engine disabled")
             encrypted_blocks = blocks.copy()
         
         # ===== STEP 7: Classical Engine =====

@@ -52,6 +52,22 @@
     "enable_gpu": false
   },
   
+  "quantum_circuit_engine": {
+    "enabled": true,
+    "block_size": 8,
+    "qubits_per_block": 14,
+    "coordinate_qubits": 6,
+    "intensity_qubits": 8,
+    "shots_per_block": 2048,
+    "backend": "aer_simulator",
+    "use_gpu_acceleration": false,
+    "device": "CPU",
+    "timeout_seconds": 30,
+    "seed": null,
+    "optimization_level": 2,
+    "measurement_basis": "computational"
+  },
+  
   "classical_engine": {
     "enabled": true,
     "algorithm": "AES-256-GCM",
