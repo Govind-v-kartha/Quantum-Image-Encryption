@@ -132,6 +132,7 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
     """
     # Start timer
     start_time = time.time()
+    phase_times = {}  # Track time for each phase
     
     # Load config
     config = load_config(config_path)
@@ -148,7 +149,8 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         'image': None,
         'metadata': None,
         'metrics': {},
-        'processing_time': 0
+        'processing_time': 0,
+        'phase_times': {}
     }
     
     try:
@@ -168,16 +170,23 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         logger.info(f"  Decrypted output: {decrypted_dir}/")
         
         # ===== STEP 1: Load Image =====
+        phase_start = time.time()
         logger.info("\n[STEP 1] Loading image...")
         image = load_image(image_path)
         logger.info(f"  Image shape: {image.shape}")
         logger.info(f"  Image info: {get_image_info(image)}")
+        phase_times['1_load_image'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['1_load_image']:.3f}s")
         
         # ===== STEP 2: Initialize Engines =====
+        phase_start = time.time()
         logger.info("\n[STEP 2] Initializing engines...")
         engines = initialize_engines(config)
+        phase_times['2_init_engines'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['2_init_engines']:.3f}s")
         
         # ===== STEP 3: AI Segmentation =====
+        phase_start = time.time()
         logger.info("\n[STEP 3] AI Semantic Segmentation...")
         if config.get('ai_engine', {}).get('enabled', True):
             logger.info("  AI Engine enabled - calling semantic segmentation")
@@ -186,8 +195,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         else:
             logger.info("  AI Engine disabled")
             roi_mask = None
+        phase_times['3_ai_segmentation'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['3_ai_segmentation']:.3f}s")
         
         # ===== STEP 4: Decision Engine =====
+        phase_start = time.time()
         logger.info("\n[STEP 4] Making encryption decisions...")
         if config.get('decision_engine', {}).get('enabled', True):
             logger.info("  Decision Engine enabled - calling adaptive allocation")
@@ -202,14 +214,20 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
             logger.info("  Decision Engine disabled")
             block_assignments = None
             encryption_decision = None
+        phase_times['4_decision'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['4_decision']:.3f}s")
         
         # ===== STEP 5: Block Extraction =====
+        phase_start = time.time()
         logger.info("\n[STEP 5] Extracting blocks...")
         block_size = config.get('quantum_circuit_engine', {}).get('block_size', 8)
         blocks, original_shape = extract_blocks(image, block_size)
         logger.info(f"  Extracted {blocks.shape[0]} blocks of size {block_size}x{block_size}")
+        phase_times['5_block_extraction'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['5_block_extraction']:.3f}s")
         
         # ===== STEP 6: Quantum Circuit Encryption (TRUE Quantum, not classical simulation) =====
+        phase_start = time.time()
         logger.info("\n[STEP 6] Quantum Circuit Encryption (Qiskit-based)...")
         secure_seed = None
         if config.get('quantum_circuit_engine', {}).get('enabled', True):
@@ -228,8 +246,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         else:
             logger.info("  Quantum Circuit Engine disabled")
             encrypted_blocks = blocks.copy()
+        phase_times['6_quantum_encryption'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['6_quantum_encryption']:.3f}s")
         
         # ===== STEP 7: Classical Engine =====
+        phase_start = time.time()
         logger.info("\n[STEP 7] Classical Encryption...")
         if config.get('classical_engine', {}).get('enabled', True):
             logger.info("  Classical Engine enabled - applying AES-256-GCM")
@@ -244,8 +265,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
                 logger.warning("  Classical engine not available")
         else:
             logger.info("  Classical Engine disabled")
+        phase_times['7_classical_encryption'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['7_classical_encryption']:.3f}s")
         
         # ===== STEP 8: Fusion Engine =====
+        phase_start = time.time()
         logger.info("\n[STEP 8] Fusing encrypted blocks...")
         fusion_engine = engines.get('fusion')
         if fusion_engine:
@@ -259,8 +283,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         else:
             logger.error("Fusion engine not initialized")
             raise RuntimeError("Fusion engine required")
+        phase_times['8_fusion'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['8_fusion']:.3f}s")
         
         # ===== STEP 9: Metadata Management =====
+        phase_start = time.time()
         logger.info("\n[STEP 9] Creating and storing metadata...")
         metadata_engine = engines.get('metadata')
         if metadata_engine:
@@ -289,8 +316,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
             result['metadata'] = metadata
         else:
             logger.warning("Metadata engine not initialized")
+        phase_times['9_metadata'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['9_metadata']:.3f}s")
         
         # ===== STEP 10: Verification =====
+        phase_start = time.time()
         logger.info("\n[STEP 10] Integrity Verification...")
         if config.get('verification_engine', {}).get('enabled', True):
             logger.info("  Verification Engine enabled")
@@ -300,8 +330,11 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
             result['metrics']['verification_passed'] = True
         else:
             logger.info("  Verification Engine disabled")
+        phase_times['10_verification'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['10_verification']:.3f}s")
         
         # ===== STEP 11: Save Encrypted Image =====
+        phase_start = time.time()
         logger.info("\n[STEP 11] Saving encrypted image...")
         output_path = encrypted_dir / "encrypted_image.png"
         
@@ -310,21 +343,37 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
             result['image'] = encrypted_image
         else:
             raise RuntimeError(f"Failed to save encrypted image")
+        phase_times['11_save_image'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['11_save_image']:.3f}s")
         
         # ===== STEP 12: Collect Metrics =====
+        phase_start = time.time()
         logger.info("\n[STEP 12] Collecting metrics...")
         result['metrics']['input_info'] = get_image_info(image)
         result['metrics']['output_info'] = get_image_info(encrypted_image)
         result['metrics']['entropy'] = float(np.random.uniform(7.5, 8.0))
         logger.info(f"  Entropy: {result['metrics']['entropy']:.3f} bits")
+        phase_times['12_metrics'] = time.time() - phase_start
+        logger.info(f"  [TIME] {phase_times['12_metrics']:.3f}s")
         
         # ===== SUCCESS =====
         elapsed_time = time.time() - start_time
         result['success'] = True
         result['processing_time'] = elapsed_time
+        result['phase_times'] = phase_times
         
         logger.info("\n" + "=" * 80)
         logger.info(f"[SUCCESS] ENCRYPTION COMPLETE in {elapsed_time:.2f} seconds")
+        
+        # Print timing summary
+        logger.info("\n[TIMING SUMMARY]")
+        logger.info("-" * 80)
+        total_phase_time = sum(phase_times.values())
+        for phase_name, phase_time in sorted(phase_times.items()):
+            percentage = (phase_time / elapsed_time) * 100 if elapsed_time > 0 else 0
+            logger.info(f"  {phase_name:.<35} {phase_time:>8.3f}s ({percentage:>5.1f}%)")
+        logger.info("-" * 80)
+        logger.info(f"  {'Total':.<35} {elapsed_time:>8.2f}s (100.0%)")
         logger.info("=" * 80)
         
         # Store encrypted image path and directories for later use
