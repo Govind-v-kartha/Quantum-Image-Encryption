@@ -2,13 +2,14 @@
 AI Engine - Phase 2
 Semantic Segmentation for ROI Detection
 
-Integrates with existing FlexiMo ViT model from /core/ai_engine/
+Integrates with FlexiMo from cloned repository
 """
 
 import numpy as np
 from typing import Dict, Any, Tuple
 import logging
 from pathlib import Path
+import sys
 
 
 class AIEngine:
@@ -28,26 +29,20 @@ class AIEngine:
         self.logger = logging.getLogger('ai_engine')
         self.is_initialized = False
         
-        # Try to import FlexiMo (optional, fallback to dummy if unavailable)
+        # Try to import FlexiMo from cloned repository
         self.use_fleximo = False
+        self.fleximo_module = None
+        
         try:
-            from fleximo_integration import FlexiMoSegmentor
-            self.fleximo_weights = Path(__file__).parent.parent / "models" / "DOFA_ViT_base_e100.pth"
-            
-            if self.fleximo_weights.exists():
-                self.segmentor = FlexiMoSegmentor(
-                    model_path=str(self.fleximo_weights),
-                    device=self.config.get('device', 'cpu')
-                )
-                self.use_fleximo = True
-                self.logger.info("FlexiMo ViT model loaded successfully")
-            else:
-                self.logger.warning(f"FlexiMo weights not found at {self.fleximo_weights}")
-                self.logger.warning("Using fallback dummy segmentation")
-                self.segmentor = None
-        except ImportError:
-            self.logger.warning("FlexiMo not available - using fallback segmentation")
-            self.segmentor = None
+            # Try to import from fleximo_repo that was cloned
+            import fleximo_repo
+            self.fleximo_module = fleximo_repo
+            self.logger.info("✓ FlexiMo repository module imported successfully")
+            self.use_fleximo = True
+        except ImportError as e:
+            self.logger.warning(f"Could not import fleximo_repo: {e}")
+            self.logger.warning("Using fallback dummy segmentation")
+            self.use_fleximo = False
     
     def initialize(self):
         """Initialize engine and prepare for processing."""
@@ -83,18 +78,19 @@ class AIEngine:
             return np.ones((image.shape[0], image.shape[1]), dtype=np.uint8) * 255
         
         try:
-            if self.use_fleximo and self.segmentor:
-                # Use actual FlexiMo segmentation
-                self.logger.info(f"Running FlexiMo ViT segmentation on {image.shape}")
-                roi_mask = self.segmentor.segment(image)
+            if self.use_fleximo and self.fleximo_module:
+                # Use FlexiMo from cloned repository
+                self.logger.info(f"Running FlexiMo segmentation (from cloned repo) on {image.shape}")
                 
-                # Ensure output is (H, W) uint8
-                if len(roi_mask.shape) == 3:
-                    roi_mask = roi_mask[:, :, 0]
-                roi_mask = roi_mask.astype(np.uint8)
-                
-                self.logger.info(f"ROI Detection: {np.count_nonzero(roi_mask > 127)} / {roi_mask.size} pixels")
-                return roi_mask
+                # Call FlexiMo function from repo if available
+                try:
+                    from fleximo_repo import segment_image_fleximo
+                    roi_mask = segment_image_fleximo(image)
+                    self.logger.info(f"✓ FlexiMo segmentation completed")
+                    return roi_mask
+                except (ImportError, AttributeError):
+                    self.logger.warning("FlexiMo function not directly callable, using fallback")
+                    return self._fallback_segmentation(image)
             else:
                 # Fallback: simple edge-based segmentation
                 return self._fallback_segmentation(image)
@@ -131,7 +127,8 @@ class AIEngine:
         """Get engine summary."""
         return {
             'engine': 'AI Engine (Phase 2)',
-            'model': 'FlexiMo ViT' if self.use_fleximo else 'Fallback (Contrast-based)',
+            'model': 'FlexiMo (from cloned repo)' if self.use_fleximo else 'Fallback (Contrast-based)',
             'status': 'initialized' if self.is_initialized else 'not_initialized',
+            'repo_loaded': self.fleximo_module is not None,
             'config': self.config
         }
