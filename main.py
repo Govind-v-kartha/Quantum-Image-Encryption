@@ -22,15 +22,15 @@ print("=" * 80)
 
 try:
     import quantum_repo
-    print("✓ Quantum Image Encryption repository loaded")
+    print("[OK] Quantum Image Encryption repository loaded")
 except ImportError as e:
-    print(f"⚠ Warning: Could not import quantum_repo: {e}")
+    print(f"[WARN] Could not import quantum_repo: {e}")
 
 try:
     import fleximo_repo
-    print("✓ FlexiMo repository loaded")
+    print("[OK] FlexiMo repository loaded")
 except ImportError as e:
-    print(f"⚠ Warning: Could not import fleximo_repo: {e}")
+    print(f"[WARN] Could not import fleximo_repo: {e}")
 
 print("=" * 80)
 
