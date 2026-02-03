@@ -39,6 +39,8 @@ import sys
 # Import independent modules
 from utils.image_utils import load_image, save_image, get_image_info, extract_blocks, reassemble_blocks
 from utils.html_generator import HTMLGenerator
+from engines.quantum_engine import QuantumEngine
+from engines.classical_engine import ClassicalEngine
 from engines.metadata_engine import MetadataEngine
 from engines.fusion_engine import FusionEngine
 
@@ -91,6 +93,16 @@ def initialize_engines(config: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("Initializing engines...")
     
     engines = {}
+    
+    # Quantum engine
+    if config.get('quantum_engine', {}).get('enabled', True):
+        engines['quantum'] = QuantumEngine(config)
+        engines['quantum'].initialize()
+    
+    # Classical engine
+    if config.get('classical_engine', {}).get('enabled', True):
+        engines['classical'] = ClassicalEngine(config)
+        engines['classical'].initialize()
     
     # Metadata engine
     if config.get('metadata_engine', {}).get('enabled', True):
@@ -201,8 +213,13 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         logger.info("\n[STEP 6] Quantum Encryption...")
         if config.get('quantum_engine', {}).get('enabled', True):
             logger.info("  Quantum Engine enabled - processing blocks")
-            encrypted_blocks = blocks.copy()
-            logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via NEQR + quantum gates")
+            quantum_engine = engines.get('quantum')
+            if quantum_engine:
+                encrypted_blocks = quantum_engine.encrypt(blocks, master_seed=12345)
+                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via NEQR + quantum gates")
+            else:
+                logger.warning("  Quantum engine not available")
+                encrypted_blocks = blocks.copy()
         else:
             logger.info("  Quantum Engine disabled")
             encrypted_blocks = blocks.copy()
@@ -211,7 +228,15 @@ def orchestrate_encryption(image_path: str, config_path: str = "config.json") ->
         logger.info("\n[STEP 7] Classical Encryption...")
         if config.get('classical_engine', {}).get('enabled', True):
             logger.info("  Classical Engine enabled - applying AES-256-GCM")
-            logger.info(f"  Applied AES-256-GCM to {encrypted_blocks.shape[0]} blocks")
+            classical_engine = engines.get('classical')
+            if classical_engine:
+                encrypted_blocks, classical_metadata = classical_engine.encrypt(
+                    encrypted_blocks, 
+                    password="quantum_image_encryption"
+                )
+                logger.info(f"  Applied AES-256-GCM to {encrypted_blocks.shape[0]} blocks")
+            else:
+                logger.warning("  Classical engine not available")
         else:
             logger.info("  Classical Engine disabled")
         

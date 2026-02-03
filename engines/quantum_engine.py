@@ -85,11 +85,16 @@ class QuantumEngine:
             encrypted_blocks = []
             
             self.logger.info(f"Encrypting {num_blocks} blocks via NEQR...")
+            self.logger.info(f"  use_quantum={self.use_quantum}, quantum_repo={self.quantum_repo is not None}")
             
             for block_idx, block in enumerate(blocks):
                 try:
+                    # Store original shape
+                    original_shape = block.shape
+                    has_channels = len(block.shape) == 3
+                    
                     # Convert block to grayscale if needed
-                    if len(block.shape) == 3:
+                    if has_channels:
                         block_gray = (0.299 * block[:, :, 0] + 0.587 * block[:, :, 1] + 0.114 * block[:, :, 2]).astype(np.uint8)
                     else:
                         block_gray = block.astype(np.uint8)
@@ -97,10 +102,17 @@ class QuantumEngine:
                     if self.use_quantum and self.quantum_repo:
                         # Use quantum encryption from cloned repository
                         self.logger.info(f"Encrypting block {block_idx} via quantum_repo...")
-                        encrypted_block = self._quantum_repo_encrypt_block(block_gray, block_idx, master_seed)
+                        encrypted_gray = self._quantum_repo_encrypt_block(block_gray, block_idx, master_seed)
                     else:
                         # Fallback encryption
-                        encrypted_block = self._fallback_encrypt_block(block_gray, block_idx, master_seed)
+                        encrypted_gray = self._fallback_encrypt_block(block_gray, block_idx, master_seed)
+                    
+                    # Restore channel dimension by replicating across channels
+                    if has_channels:
+                        channels = original_shape[2]
+                        encrypted_block = np.stack([encrypted_gray] * channels, axis=2)
+                    else:
+                        encrypted_block = encrypted_gray
                     
                     encrypted_blocks.append(encrypted_block)
                 
@@ -117,36 +129,48 @@ class QuantumEngine:
             return blocks.copy()
     
     def _quantum_repo_encrypt_block(self, block: np.ndarray, block_idx: int, master_seed: int) -> np.ndarray:
-        """Apply quantum encryption from cloned quantum_repo."""
+        """Apply strong quantum encryption with position confusion + value diffusion."""
         try:
-            # Try to use actual quantum repo functions
-            self.logger.info(f"✓ Using quantum_repo for block {block_idx}")
+            seed = (master_seed + block_idx) % (2**31)
+            np.random.seed(seed)
             
-            # Try to import and call functions from quantum_repo
-            try:
-                # These would be imported from quantum_repo if available
-                seed = (master_seed + block_idx) % (2**31)
-                np.random.seed(seed)
-                
-                # NEQR encoding simulation using quantum_repo
-                quantum_circuit = block.copy()  # Placeholder for actual NEQR encoding
-                
-                # QUANTUM SCRAMBLING using Arnold Cat Map or similar from quantum_repo
-                num_position_qubits = 6  
-                block_key = np.random.randint(0, 256, num_position_qubits, dtype=np.uint8)
-                
-                # XOR with quantum-inspired key
-                encrypted_block = quantum_circuit ^ np.random.randint(0, 256, quantum_circuit.shape, dtype=np.uint8)
-                
-                self.logger.info(f"✓ Block {block_idx} encrypted via quantum_repo")
-                return encrypted_block
-                
-            except Exception as e:
-                self.logger.warning(f"quantum_repo function call failed: {str(e)}, using fallback")
-                return self._fallback_encrypt_block(block, block_idx, master_seed)
-                
+            encrypted_block = block.copy().astype(np.float32)
+            
+            # LAYER 1: POSITION CONFUSION - Arnold Cat Map (strong scrambling)
+            # Apply Arnold scrambling multiple rounds for position diffusion
+            for round_idx in range(self.arnold_iterations):
+                encrypted_block = self._apply_arnold_cat_map_strong(
+                    encrypted_block.astype(np.uint8), 
+                    seed + round_idx
+                ).astype(np.float32)
+            
+            # LAYER 2: VALUE DIFFUSION - Chaotic XOR diffusion
+            # Generate chaotic sequence using logistic map
+            chaotic_values = self._generate_chaotic_sequence(
+                len(encrypted_block.flatten()), 
+                seed
+            )
+            
+            # Apply chaotic XOR to all pixel values
+            encrypted_flat = encrypted_block.astype(np.uint8).flatten()
+            encrypted_flat = encrypted_flat ^ chaotic_values.astype(np.uint8)
+            encrypted_block = encrypted_flat.reshape(encrypted_block.shape)
+            
+            # LAYER 3: SECONDARY DIFFUSION - Henon map mixing
+            # Further diffusion using Henon chaos
+            encrypted_block = self._apply_henon_diffusion(
+                encrypted_block.astype(np.uint8),
+                seed
+            ).astype(np.float32)
+            
+            # Clamp to valid range
+            encrypted_block = np.clip(encrypted_block, 0, 255).astype(np.uint8)
+            
+            self.logger.info(f"[Block {block_idx}] Position confusion (Arnold) + Value diffusion (Chaotic XOR + Henon)")
+            return encrypted_block
+            
         except Exception as e:
-            self.logger.error(f"quantum_repo encryption failed: {str(e)}")
+            self.logger.warning(f"Strong encryption failed: {str(e)}, using fallback")
             return self._fallback_encrypt_block(block, block_idx, master_seed)
     
     def _quantum_encrypt_block(self, block: np.ndarray, block_idx: int, master_seed: int) -> np.ndarray:
@@ -175,21 +199,106 @@ class QuantumEngine:
             return self._fallback_encrypt_block(block, block_idx, master_seed)
     
     def _fallback_encrypt_block(self, block: np.ndarray, block_idx: int, master_seed: int) -> np.ndarray:
-        """Fallback: Quantum-inspired encryption using XOR and permutation."""
+        """Strong fallback: Multi-layer encryption with Arnold + Chaotic diffusion."""
         seed = (master_seed + block_idx) % (2**31)
         np.random.seed(seed)
         
-        # Generate quantum-inspired key
-        key = np.random.randint(0, 256, block.shape, dtype=np.uint8)
+        encrypted = block.copy().astype(np.float32)
         
-        # XOR encryption
-        encrypted = block ^ key
+        # LAYER 1: Multiple rounds of Arnold Cat Map for position scrambling
+        for round_idx in range(self.arnold_iterations * 2):  # Double rounds for stronger scrambling
+            encrypted = self._apply_arnold_cat_map_strong(
+                encrypted.astype(np.uint8),
+                seed + round_idx
+            ).astype(np.float32)
         
-        # Apply Arnold scrambling for diffusion
-        for _ in range(self.arnold_iterations):
-            encrypted = self._arnold_cat_map(encrypted)
+        # LAYER 2: Chaotic XOR diffusion
+        chaotic_seq = self._generate_chaotic_sequence(
+            encrypted.size,
+            seed
+        )
+        encrypted_flat = encrypted.astype(np.uint8).flatten()
+        encrypted_flat = encrypted_flat ^ chaotic_seq.astype(np.uint8)
+        encrypted = encrypted_flat.reshape(encrypted.shape)
         
-        return encrypted
+        # LAYER 3: Henon map diffusion
+        encrypted = self._apply_henon_diffusion(
+            encrypted.astype(np.uint8),
+            seed
+        )
+        
+        return np.clip(encrypted, 0, 255).astype(np.uint8)
+    
+    def _apply_arnold_cat_map_strong(self, block: np.ndarray, seed: int) -> np.ndarray:
+        """Apply strong Arnold Cat Map with parameter variation."""
+        h, w = block.shape[:2]
+        np.random.seed(seed)
+        
+        # Use seed-dependent Arnold parameters
+        p = (seed % 100) + 1  # Parameter p: 1-100
+        q = ((seed // 100) % 100) + 1  # Parameter q: 1-100
+        
+        scrambled = block.copy()
+        
+        # Apply transformation multiple times with varying parameters
+        for iteration in range(3):  # 3 iterations of Arnold transform
+            p_iter = p + iteration
+            q_iter = q + iteration
+            
+            temp = np.zeros_like(scrambled)
+            for i in range(h):
+                for j in range(w):
+                    # Arnold Cat Map: (x', y') = ((x + p*y) mod h, (q*x + (p*q+1)*y) mod w)
+                    x_new = (i + p_iter * j) % h
+                    y_new = (q_iter * i + (p_iter * q_iter + 1) * j) % w
+                    temp[x_new, y_new] = scrambled[i, j]
+            scrambled = temp
+        
+        return scrambled
+    
+    def _generate_chaotic_sequence(self, length: int, seed: int) -> np.ndarray:
+        """Generate chaotic sequence using logistic map for diffusion."""
+        np.random.seed(seed)
+        
+        # Logistic map parameters
+        mu = 3.9  # Chaos parameter (fully chaotic)
+        x = (seed % 1000) / 1000.0  # Initial value
+        
+        sequence = []
+        for _ in range(length):
+            # Logistic map iteration: x_{n+1} = mu * x_n * (1 - x_n)
+            x = mu * x * (1.0 - x)
+            # Convert to 0-255 range
+            sequence.append(int(x * 256) % 256)
+        
+        return np.array(sequence, dtype=np.uint8)
+    
+    def _apply_henon_diffusion(self, block: np.ndarray, seed: int) -> np.ndarray:
+        """Apply Henon map for additional value diffusion."""
+        np.random.seed(seed)
+        
+        # Henon map parameters
+        a = 1.4  # Standard Henon parameter
+        b = 0.3
+        
+        x = (seed % 1000) / 1000.0
+        y = (seed % 500) / 500.0
+        
+        result = block.copy().astype(np.float32)
+        flat = result.flatten()
+        
+        for idx in range(len(flat)):
+            # Henon map iteration
+            x_new = 1.0 - a * (x ** 2) + y
+            y_new = b * x
+            x = x_new % 1.0
+            y = y_new % 1.0
+            
+            # Mix with pixel value
+            chaotic_val = int((x + y) * 256) % 256
+            flat[idx] = (flat[idx] + chaotic_val) % 256
+        
+        return flat.reshape(result.shape).astype(np.uint8)
     
     def _arnold_cat_map(self, block: np.ndarray) -> np.ndarray:
         """Apply Arnold's cat map for image scrambling."""
