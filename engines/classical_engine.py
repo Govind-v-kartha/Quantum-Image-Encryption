@@ -337,6 +337,10 @@ class ClassicalEngine:
         """
         self.logger.info(f"Classical decryption ({self.algorithm})...")
         
+        if not self.validate_input(encrypted_blocks):
+            self.logger.error("Invalid encrypted block input")
+            return encrypted_blocks.copy()
+        
         if metadata and 'salt' in metadata:
             salt = bytes.fromhex(metadata['salt'])
         else:
@@ -349,10 +353,21 @@ class ClassicalEngine:
         else:
             key = self._derive_key_simple(password, salt)
         
-        # For AES-GCM, decryption would require preserving nonce from encryption
-        # In fallback mode, we can reverse XOR but not permutation perfectly
-        
-        return encrypted_blocks.copy()  # Simplified: return as-is
+        try:
+            # Decrypt blocks using reverse fallback method
+            decrypted_blocks = []
+            for block_idx, encrypted_block in enumerate(encrypted_blocks):
+                # Reverse of _encrypt_block_aes_chaotic
+                decrypted_block = self._decrypt_block_chaotic(encrypted_block, key, salt, block_idx)
+                decrypted_blocks.append(decrypted_block)
+            
+            result = np.stack(decrypted_blocks, axis=0)
+            self.logger.info(f"Classical decryption complete: {len(decrypted_blocks)} blocks")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Classical decryption failed: {str(e)}")
+            return encrypted_blocks.copy()
     
     def _encrypt_block_aes_chaotic(self, block: np.ndarray, key: bytes, salt: bytes, block_idx: int) -> np.ndarray:
         """Encrypt using chaotic diffusion when cryptography not available."""
@@ -360,7 +375,7 @@ class ClassicalEngine:
         seed = int.from_bytes(key[:4], 'big') + block_idx
         np.random.seed(seed)
         
-        result = block.copy().astype(np.float32)
+        result = block.copy().astype(np.uint8)
         
         # Layer 2: XOR with chaotic values
         chaotic = np.random.randint(0, 256, block.shape, dtype=np.uint8)
@@ -369,15 +384,43 @@ class ClassicalEngine:
         # Layer 3: Logistic map diffusion
         mu = 3.99
         x = ((block_idx + 1) / 1000.0) % 1.0
-        result_flat = result.flatten()
+        result_flat = result.flatten().astype(np.uint16)  # Use uint16 for intermediate calculations
         for idx in range(len(result_flat)):
             x = mu * x * (1.0 - x)
-            result_flat[idx] = (result_flat[idx] + int(x * 256)) % 256
-        result = result_flat.reshape(block.shape)
+            chaotic_val = int(x * 256) & 0xFF  # Ensure value is 0-255
+            result_flat[idx] = (result_flat[idx] + chaotic_val) & 0xFF  # Bitwise AND to keep in uint8 range
+        result = result_flat.astype(np.uint8).reshape(block.shape)
         
         # Layer 4: Second XOR with key material
         key_expanded = np.tile(np.frombuffer(key, dtype=np.uint8), (block.size // len(key)) + 1)[:block.size]
-        result = (result ^ key_expanded.reshape(block.shape)) % 256
+        result = (result.astype(np.uint8) ^ key_expanded.reshape(block.shape)).astype(np.uint8)
+        
+        return result.astype(np.uint8)
+    
+    def _decrypt_block_chaotic(self, encrypted_block: np.ndarray, key: bytes, salt: bytes, block_idx: int) -> np.ndarray:
+        """Decrypt a block using reverse chaotic diffusion (inverse of _encrypt_block_aes_chaotic)."""
+        result = encrypted_block.copy().astype(np.uint8)
+        
+        # REVERSE Layer 4: Second XOR with key material (XOR is self-inverse)
+        key_expanded = np.tile(np.frombuffer(key, dtype=np.uint8), (result.size // len(key)) + 1)[:result.size]
+        result = (result.astype(np.uint8) ^ key_expanded.reshape(result.shape)).astype(np.uint8)
+        
+        # REVERSE Layer 3: Logistic map diffusion (subtract instead of add)
+        seed = int.from_bytes(key[:4], 'big') + block_idx
+        np.random.seed(seed)
+        mu = 3.99
+        x = ((block_idx + 1) / 1000.0) % 1.0
+        result_flat = result.flatten().astype(np.uint16)
+        for idx in range(len(result_flat)):
+            x = mu * x * (1.0 - x)
+            chaotic_val = int(x * 256) & 0xFF
+            result_flat[idx] = (result_flat[idx] - chaotic_val) & 0xFF  # Subtract to reverse
+        result = result_flat.astype(np.uint8).reshape(result.shape)
+        
+        # REVERSE Layer 2: XOR with chaotic values (XOR is self-inverse, need same sequence)
+        np.random.seed(seed)
+        chaotic = np.random.randint(0, 256, result.shape, dtype=np.uint8)
+        result = result.astype(np.uint8) ^ chaotic
         
         return result.astype(np.uint8)
     
