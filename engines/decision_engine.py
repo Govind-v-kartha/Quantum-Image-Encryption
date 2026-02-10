@@ -1,183 +1,153 @@
 """
-Decision Engine - Phase 3
-Adaptive Encryption Level Assignment
-
-Makes decisions about which blocks get which encryption level.
-Integrates with existing adaptive decision logic from /core/decision_engine/
+Layer 3: Decision Engine
+Separates image into ROI and Background using the ROI mask.
+Divides ROI into 8x8 blocks, pads under-sized blocks, records positions.
 """
 
 import numpy as np
-from typing import Dict, Any, List
 import logging
+from typing import Dict, Any, List, Tuple
 
 
 class DecisionEngine:
-    """
-    Makes adaptive encryption decisions based on image content and ROI analysis.
-    Determines which blocks use quantum vs classical encryption.
-    """
-    
+    """Split image into ROI 8x8 blocks and BG region using a binary mask."""
+
+    BLOCK_SIZE = 8  # fixed 8x8
+
     def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize Decision Engine.
-        
-        Args:
-            config: Configuration dict with decision_engine settings
-        """
         self.config = config.get('decision_engine', {})
         self.logger = logging.getLogger('decision_engine')
         self.is_initialized = False
-        
-        # Load thresholds from config
-        self.roi_thresholds = self.config.get('roi_thresholds', {
-            'small': 100,
-            'medium': 500,
-            'large': 2000,
-            'huge': 5000
-        })
-        
-        # Encryption level assignments
-        self.encryption_levels = {
-            'FULL_QUANTUM': 3,     # Maximum security
-            'HYBRID': 2,           # Mixed quantum-classical
-            'CLASSICAL_ONLY': 1    # Classical only
-        }
-    
+
     def initialize(self):
-        """Initialize engine and prepare for processing."""
         self.is_initialized = True
-        self.logger.info("Decision Engine initialized")
-    
-    def validate_input(self, roi_mask: np.ndarray) -> bool:
-        """Validate ROI mask input."""
-        if not isinstance(roi_mask, np.ndarray):
-            return False
-        if len(roi_mask.shape) != 2:
-            return False
-        if roi_mask.dtype != np.uint8:
-            return False
-        return True
-    
-    def decide(self, roi_mask: np.ndarray, image_shape: tuple) -> Dict[str, Any]:
+        self.logger.info("Decision Engine initialized (block_size=8x8)")
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def separate_roi_bg(
+        self,
+        image: np.ndarray,
+        roi_mask: np.ndarray,
+    ) -> Dict[str, Any]:
         """
-        Make encryption decisions based on ROI analysis.
-        
-        Args:
-            roi_mask: ROI detection mask (H, W) uint8
-            image_shape: Original image shape (H, W, C)
-            
-        Returns:
-            Decision dict with encryption allocations
+        Separate image into ROI 8x8 blocks and background.
+
+        Parameters
+        ----------
+        image    : (H, W, 3) uint8 RGB
+        roi_mask : (H, W) uint8, {0, 255}
+
+        Returns
+        -------
+        dict with keys:
+            roi_blocks   : list[np.ndarray]  – each (8,8,3) uint8
+            block_map    : list[dict]         – position/padding info per block
+            bg_image     : np.ndarray         – (H,W,3) uint8, ROI pixels zeroed
+            roi_mask     : np.ndarray         – original mask (kept for metadata)
+            image_shape  : (H, W, 3)
         """
-        if not self.is_initialized:
-            self.initialize()
-        
-        if not self.validate_input(roi_mask):
-            self.logger.error("Invalid ROI mask")
-            # Default decision: full quantum encryption
-            return {
-                'roi_category': 'unknown',
-                'primary_encryption_level': 'FULL_QUANTUM',
-                'adaptive_key_length': 256,
-                'block_assignments': {}
-            }
-        
-        try:
-            # Analyze ROI size
-            roi_pixels = np.count_nonzero(roi_mask > 127)
-            total_pixels = roi_mask.size
-            roi_percentage = (roi_pixels / total_pixels) * 100
-            
-            self.logger.info(f"ROI Analysis: {roi_pixels}/{total_pixels} pixels ({roi_percentage:.1f}%)")
-            
-            # Categorize ROI
-            roi_category = self._categorize_roi(roi_pixels)
-            
-            # Determine encryption level
-            encryption_level = self._determine_encryption_level(roi_category)
-            
-            # Determine adaptive key length
-            key_length = self._determine_key_length(roi_category)
-            
-            # Create block assignments (simplified - full image treatment)
-            block_assignments = {
-                'default': encryption_level,
-                'roi_category': roi_category,
-                'roi_pixels': roi_pixels,
-                'roi_percentage': roi_percentage
-            }
-            
-            decision = {
-                'roi_category': roi_category,
-                'primary_encryption_level': encryption_level,
-                'adaptive_key_length': key_length,
-                'block_assignments': block_assignments,
-                'roi_analysis': {
-                    'roi_pixels': roi_pixels,
-                    'total_pixels': total_pixels,
-                    'roi_percentage': roi_percentage
-                }
-            }
-            
-            self.logger.info(f"Decision: {encryption_level} with {key_length}-bit keys")
-            return decision
-        
-        except Exception as e:
-            self.logger.error(f"Decision making failed: {str(e)}")
-            # Default fallback
-            return {
-                'roi_category': 'error',
-                'primary_encryption_level': 'FULL_QUANTUM',
-                'adaptive_key_length': 256,
-                'block_assignments': {}
-            }
-    
-    def _categorize_roi(self, roi_pixels: int) -> str:
-        """Categorize ROI based on size."""
-        thresholds = self.roi_thresholds
-        
-        if roi_pixels < thresholds.get('small', 100):
-            return 'tiny'
-        elif roi_pixels < thresholds.get('medium', 500):
-            return 'small'
-        elif roi_pixels < thresholds.get('large', 2000):
-            return 'medium'
-        elif roi_pixels < thresholds.get('huge', 5000):
-            return 'large'
-        else:
-            return 'huge'
-    
-    def _determine_encryption_level(self, roi_category: str) -> str:
-        """Determine encryption level based on ROI category."""
-        level_map = self.config.get('encryption_level_map', {
-            'tiny': 'CLASSICAL_ONLY',
-            'small': 'CLASSICAL_ONLY',
-            'medium': 'HYBRID',
-            'large': 'FULL_QUANTUM',
-            'huge': 'FULL_QUANTUM',
-            'error': 'FULL_QUANTUM'
-        })
-        
-        return level_map.get(roi_category, 'FULL_QUANTUM')
-    
-    def _determine_key_length(self, roi_category: str) -> int:
-        """Determine adaptive key length based on ROI category."""
-        key_map = self.config.get('key_length_map', {
-            'tiny': 128,
-            'small': 192,
-            'medium': 256,
-            'large': 256,
-            'huge': 512,
-            'error': 256
-        })
-        
-        return key_map.get(roi_category, 256)
-    
-    def get_summary(self) -> Dict[str, Any]:
-        """Get engine summary."""
+        h, w, c = image.shape
+        B = self.BLOCK_SIZE
+
+        # 1. Identify which 8x8 grid cells contain ROI
+        roi_blocks: List[np.ndarray] = []
+        block_map: List[Dict[str, Any]] = []
+
+        # Walk the grid
+        for row in range(0, h, B):
+            for col in range(0, w, B):
+                # Actual region (may be < 8 at edges)
+                r_end = min(row + B, h)
+                c_end = min(col + B, w)
+
+                block_mask = roi_mask[row:r_end, col:c_end]
+
+                # A block is ROI if ANY pixel in it is ROI
+                if np.any(block_mask > 0):
+                    block_data = image[row:r_end, col:c_end].copy()  # (bh, bw, 3)
+                    bh, bw = block_data.shape[:2]
+
+                    # Pad to 8x8 if needed
+                    padded = False
+                    if bh < B or bw < B:
+                        padded_block = np.zeros((B, B, c), dtype=np.uint8)
+                        padded_block[:bh, :bw, :] = block_data
+                        block_data = padded_block
+                        padded = True
+
+                    roi_blocks.append(block_data)  # always (8,8,3)
+                    block_map.append({
+                        'index': len(block_map),
+                        'row': int(row),
+                        'col': int(col),
+                        'actual_h': int(bh),
+                        'actual_w': int(bw),
+                        'padded': padded,
+                    })
+
+        # 2. Build background image – ROI pixel positions zeroed
+        bg_image = image.copy()
+        # Zero out every ROI block position
+        for bm in block_map:
+            r, c_ = bm['row'], bm['col']
+            ah, aw = bm['actual_h'], bm['actual_w']
+            bg_image[r:r+ah, c_:c_+aw] = 0
+
+        n_roi = len(roi_blocks)
+        n_total = ((h + B - 1) // B) * ((w + B - 1) // B)
+        self.logger.info(
+            f"  ROI blocks: {n_roi}/{n_total}  "
+            f"({n_roi / max(n_total, 1) * 100:.1f}%)"
+        )
+        self.logger.info(
+            f"  BG pixels: {np.count_nonzero(bg_image.sum(axis=2) > 0)} non-zero"
+        )
+
         return {
-            'engine': 'Decision Engine (Phase 3)',
-            'status': 'initialized' if self.is_initialized else 'not_initialized',
-            'thresholds': self.roi_thresholds,
-            'config': self.config
+            'roi_blocks': roi_blocks,
+            'block_map': block_map,
+            'bg_image': bg_image,
+            'roi_mask': roi_mask,
+            'image_shape': image.shape,
         }
+
+    # ------------------------------------------------------------------
+    # Reconstruction (for decryption)
+    # ------------------------------------------------------------------
+
+    def reconstruct_image(
+        self,
+        decrypted_roi_blocks: List[np.ndarray],
+        decrypted_bg_image: np.ndarray,
+        block_map: List[Dict[str, Any]],
+        image_shape: Tuple[int, int, int],
+    ) -> np.ndarray:
+        """
+        Merge decrypted ROI blocks and decrypted BG into a full image.
+
+        Parameters
+        ----------
+        decrypted_roi_blocks : list[(8,8,3) uint8]
+        decrypted_bg_image   : (H,W,3) uint8
+        block_map            : list[dict]
+        image_shape          : (H, W, 3)
+
+        Returns
+        -------
+        image : (H, W, 3) uint8
+        """
+        h, w, c = image_shape
+        result = decrypted_bg_image.copy()
+
+        for i, bm in enumerate(block_map):
+            r, col = bm['row'], bm['col']
+            ah, aw = bm['actual_h'], bm['actual_w']
+            block = decrypted_roi_blocks[i]
+            result[r:r+ah, col:col+aw] = block[:ah, :aw]
+
+        self.logger.info(f"  Reconstructed image: shape={result.shape}")
+        return result
+

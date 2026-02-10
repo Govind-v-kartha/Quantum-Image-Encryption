@@ -1,40 +1,31 @@
 """
-Main Entry Point - Hybrid Quantum-Classical Image Encryption System
+Main Entry Point - 6-Layer Hybrid Quantum-Classical Image Encryption
 
-This integrates:
-- FlexiMo: Semantic segmentation and ROI detection
-- Quantum-Image-Encryption: NEQR quantum encoding + AES-256-GCM
+Integrates:
+  - FlexiMo (Repo A): Semantic segmentation for ROI detection
+  - Quantum-Image-Encryption (Repo B): NEQR quantum encoding for ROI
+  - AES-256-GCM: Classical encryption for background
 """
 
 import sys
 from pathlib import Path
 
-# ===== EXPOSE CLONED REPOS TO PYTHON =====
-# Add repos folder to Python path so engines can import from them
+# Expose cloned repos to Python path
 repos_path = Path(__file__).parent / "repos"
-if str(repos_path) not in sys.path:
-    sys.path.insert(0, str(repos_path))
+quantum_repo_path = repos_path / "quantum_repo"
 
-# Import repos to make them available as packages
-print("=" * 80)
-print("LOADING REPOSITORY INTEGRATIONS...")
-print("=" * 80)
-
-try:
-    import quantum_repo
-    print("[OK] Quantum Image Encryption repository loaded")
-except ImportError as e:
-    print(f"[WARN] Could not import quantum_repo: {e}")
-
-try:
-    import fleximo_repo
-    print("[OK] FlexiMo repository loaded")
-except ImportError as e:
-    print(f"[WARN] Could not import fleximo_repo: {e}")
+for p in (str(repos_path), str(quantum_repo_path)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 print("=" * 80)
+print("6-LAYER HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION SYSTEM")
+print("=" * 80)
+print("  Repo A: FlexiMo Vision Transformer (ROI detection)")
+print("  Repo B: NEQR Quantum Encryption     (ROI blocks)")
+print("  Repo C: AES-256-GCM                 (background)")
+print("=" * 80)
 
-# ===== IMPORT MAIN WORKFLOWS =====
 from workflows.encrypt import main as encrypt_main
 
 if __name__ == "__main__":

@@ -1,568 +1,331 @@
 """
-Responsibilities:
-- Read configuration
-- Load input image
-- Call engines in order
-- Pass data between engines
-- Collect results
-- Handle errors
-- Log execution
-
-Everything else is in independent modules in /engines/ and /utils/.
+Encryption Workflow - 6-Layer Hybrid Quantum-Classical Pipeline
 
 Architecture:
-  main.py (PURE ORCHESTRATOR - flow control only)
-    ↓
-  /engines/ (Independent modules)
-    ├── ai_engine.py
-    ├── decision_engine.py
-    ├── quantum_engine.py
-    ├── classical_engine.py
-    ├── fusion_engine.py
-    ├── metadata_engine.py
-    └── verification_engine.py
-    ↓
-  /utils/ (Utilities)
-    ├── image_utils.py
-    ├── block_utils.py
-    └── crypto_utils.py
+  Layer 1  PreprocessingEngine   - load & validate image
+  Layer 2  AIEngine              - FlexiMo ROI / BG segmentation
+  Layer 3  DecisionEngine        - split ROI 8x8 blocks + BG
+  Layer 4  QuantumEngine         - NEQR encryption on ROI blocks  (Repo B)
+  Layer 5  ClassicalEngine       - AES-256-GCM on background     (cryptography)
+  Layer 6  FusionEngine          - merge encrypted ROI + BG
+         + MetadataEngine        - persist everything for decryption
+         + VerificationEngine    - quality checks
 """
 
 import json
 import logging
+import secrets
 import time
-from pathlib import Path
-from typing import Dict, Any, Optional
-import numpy as np
 import sys
+from pathlib import Path
+from typing import Dict, Any
 
-# Import independent modules
-from utils.image_utils import load_image, save_image, get_image_info, extract_blocks, reassemble_blocks
-from utils.html_generator import HTMLGenerator
-from engines.quantum_circuit_engine import QuantumCircuitEncryptionEngine
+import numpy as np
+
+from engines.preprocessing_engine import PreprocessingEngine
+from engines.ai_engine import AIEngine
+from engines.decision_engine import DecisionEngine
+from engines.quantum_engine import QuantumEngine
 from engines.classical_engine import ClassicalEngine
-from engines.metadata_engine import MetadataEngine
 from engines.fusion_engine import FusionEngine
+from engines.metadata_engine import MetadataEngine
+from engines.verification_engine import VerificationEngine
 
+
+# ====================================================================
+# Helpers
+# ====================================================================
+
+def load_config(path: str = "config.json") -> Dict[str, Any]:
+    with open(path, 'r') as f:
+        return json.load(f)
 
 
 def setup_logging(config: Dict[str, Any]) -> logging.Logger:
-    """Setup logging based on configuration."""
-    log_config = config.get('logging', {})
-    log_level = getattr(logging, log_config.get('level', 'INFO'))
-    log_format = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
+    lc = config.get('logging', {})
+    level = getattr(logging, lc.get('level', 'INFO'))
+    fmt   = lc.get('format',
+                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
     logger = logging.getLogger('orchestrator')
-    logger.setLevel(log_level)
-    
-    # Console handler
-    if log_config.get('console_output', True):
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(log_level)
-        formatter = logging.Formatter(log_format)
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-    
-    # File handler
-    log_file = log_config.get('file_output')
+    if logger.handlers:
+        return logger
+    logger.setLevel(level)
+
+    if lc.get('console_output', True):
+        ch = logging.StreamHandler()
+        ch.setLevel(level)
+        ch.setFormatter(logging.Formatter(fmt))
+        logger.addHandler(ch)
+
+    log_file = lc.get('file_output')
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(log_level)
-        formatter = logging.Formatter(log_format)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    
+        fh = logging.FileHandler(log_file, encoding='utf-8')
+        fh.setLevel(level)
+        fh.setFormatter(logging.Formatter(fmt))
+        logger.addHandler(fh)
+
     return logger
 
 
-def load_config(config_path: str = "config.json") -> Dict[str, Any]:
-    """Load configuration from JSON file."""
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        return config
-    except Exception as e:
-        print(f"Failed to load config: {str(e)}")
-        raise
+# ====================================================================
+# Main orchestration
+# ====================================================================
 
-
-def initialize_engines(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Initialize all engines."""
-    logger = logging.getLogger('orchestrator')
-    logger.info("Initializing engines...")
-    
-    engines = {}
-    
-    # Quantum circuit encryption engine (TRUE quantum, not classical simulation)
-    if config.get('quantum_circuit_engine', {}).get('enabled', True):
-        engines['quantum'] = QuantumCircuitEncryptionEngine(config)
-        engines['quantum'].initialize()
-    
-    # Classical engine
-    if config.get('classical_engine', {}).get('enabled', True):
-        engines['classical'] = ClassicalEngine(config)
-        engines['classical'].initialize()
-    
-    # Metadata engine
-    if config.get('metadata_engine', {}).get('enabled', True):
-        engines['metadata'] = MetadataEngine(config)
-        engines['metadata'].initialize()
-    
-    # Fusion engine
-    if config.get('fusion_engine', {}).get('enabled', True):
-        engines['fusion'] = FusionEngine(config)
-        engines['fusion'].initialize()
-    
-    logger.info(f"Initialized {len(engines)} engines")
-    return engines
-
-
-def orchestrate_encryption(image_path: str, config_path: str = "config.json") -> Dict[str, Any]:
+def orchestrate_encryption(
+    image_path: str,
+    config_path: str = "config.json",
+) -> Dict[str, Any]:
     """
-    Main orchestration function.
-    Controls the complete encryption pipeline (Phases 1-10).
-    
-    Args:
-        image_path: Path to input image
-        config_path: Path to config file
-        
-    Returns:
-        Result dict with outputs
+    Run the full 6-layer encryption pipeline.
+
+    Returns
+    -------
+    result : dict  with keys success, error, metrics, processing_time, ...
     """
-    # Start timer
-    start_time = time.time()
-    phase_times = {}  # Track time for each phase
-    
-    # Load config
+    t0 = time.time()
+    phase_times: Dict[str, float] = {}
+
     config = load_config(config_path)
-    
-    # Setup logging
     logger = setup_logging(config)
+
     logger.info("=" * 80)
-    logger.info("HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION - ORCHESTRATOR (PHASES 1-10)")
+    logger.info("6-LAYER HYBRID QUANTUM-CLASSICAL IMAGE ENCRYPTION")
     logger.info("=" * 80)
-    
-    result = {
+
+    result: Dict[str, Any] = {
         'success': False,
         'error': None,
-        'image': None,
-        'metadata': None,
         'metrics': {},
         'processing_time': 0,
-        'phase_times': {}
+        'phase_times': {},
     }
-    
+
     try:
-        # ===== EXTRACT INPUT FILENAME FOR DYNAMIC OUTPUT FOLDERS =====
-        input_filename_stem = Path(image_path).stem  # Get filename without extension
-        input_filename_full = Path(image_path).name  # Get full filename with extension
-        encrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename_stem}_01_encrypted"
-        decrypted_dir = Path(config.get('output', {}).get('encrypted_dir', 'output/encrypted')).parent / f"{input_filename_stem}_02_decrypted"
-        metadata_dir = Path(config.get('output', {}).get('metadata_dir', 'output/metadata'))
-        
-        # Create output directories
-        encrypted_dir.mkdir(parents=True, exist_ok=True)
-        metadata_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"Output folders will be named after input file: {input_filename_stem}")
-        logger.info(f"  Encrypted output: {encrypted_dir}/")
-        logger.info(f"  Decrypted output: {decrypted_dir}/")
-        
-        # ===== STEP 1: Load Image =====
-        phase_start = time.time()
-        logger.info("\n[STEP 1] Loading image...")
-        image = load_image(image_path)
-        logger.info(f"  Image shape: {image.shape}")
-        logger.info(f"  Image info: {get_image_info(image)}")
-        phase_times['1_load_image'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['1_load_image']:.3f}s")
-        
-        # ===== STEP 2: Initialize Engines =====
-        phase_start = time.time()
-        logger.info("\n[STEP 2] Initializing engines...")
-        engines = initialize_engines(config)
-        phase_times['2_init_engines'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['2_init_engines']:.3f}s")
-        
-        # ===== STEP 3: AI Segmentation =====
-        phase_start = time.time()
-        logger.info("\n[STEP 3] AI Semantic Segmentation...")
-        if config.get('ai_engine', {}).get('enabled', True):
-            logger.info("  AI Engine enabled - calling semantic segmentation")
-            roi_mask = np.ones((image.shape[0], image.shape[1]), dtype=np.uint8) * 255
-            logger.info(f"  ROI mask shape: {roi_mask.shape}")
-        else:
-            logger.info("  AI Engine disabled")
-            roi_mask = None
-        phase_times['3_ai_segmentation'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['3_ai_segmentation']:.3f}s")
-        
-        # ===== STEP 4: Decision Engine =====
-        phase_start = time.time()
-        logger.info("\n[STEP 4] Making encryption decisions...")
-        if config.get('decision_engine', {}).get('enabled', True):
-            logger.info("  Decision Engine enabled - calling adaptive allocation")
-            block_assignments = {'default': 'FULL_QUANTUM'}
-            encryption_decision = {
-                'roi_category': 'medium',
-                'primary_encryption_level': 'FULL_QUANTUM',
-                'adaptive_key_length': 256
-            }
-            logger.info(f"  Encryption decision: {encryption_decision['primary_encryption_level']}")
-        else:
-            logger.info("  Decision Engine disabled")
-            block_assignments = None
-            encryption_decision = None
-        phase_times['4_decision'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['4_decision']:.3f}s")
-        
-        # ===== STEP 5: Block Extraction =====
-        phase_start = time.time()
-        logger.info("\n[STEP 5] Extracting blocks...")
-        block_size = config.get('quantum_circuit_engine', {}).get('block_size', 8)
-        blocks, original_shape = extract_blocks(image, block_size)
-        logger.info(f"  Extracted {blocks.shape[0]} blocks of size {block_size}x{block_size}")
-        phase_times['5_block_extraction'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['5_block_extraction']:.3f}s")
-        
-        # ===== STEP 6: Quantum Circuit Encryption (TRUE Quantum, not classical simulation) =====
-        phase_start = time.time()
-        logger.info("\n[STEP 6] Quantum Circuit Encryption (Qiskit-based)...")
-        secure_seed = None
-        if config.get('quantum_circuit_engine', {}).get('enabled', True):
-            logger.info("  Quantum Circuit Engine enabled - TRUE quantum encryption via Qiskit")
-            quantum_engine = engines.get('quantum')
-            if quantum_engine:
-                # Use secure random seed for reproducibility
-                import secrets
-                secure_seed = secrets.randbelow(2**31 - 1)
-                logger.info(f"  Using secure random seed: {secure_seed}")
-                encrypted_blocks = quantum_engine.encrypt(blocks, master_seed=secure_seed)
-                logger.info(f"  Encrypted {encrypted_blocks.shape[0]} blocks via quantum circuits (Qiskit Aer)")
-            else:
-                logger.warning("  Quantum Circuit engine not available")
-                encrypted_blocks = blocks.copy()
-        else:
-            logger.info("  Quantum Circuit Engine disabled")
-            encrypted_blocks = blocks.copy()
-        phase_times['6_quantum_encryption'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['6_quantum_encryption']:.3f}s")
-        
-        # ===== STEP 7: Classical Engine =====
-        phase_start = time.time()
-        logger.info("\n[STEP 7] Classical Encryption...")
-        if config.get('classical_engine', {}).get('enabled', True):
-            logger.info("  Classical Engine enabled - applying AES-256-GCM")
-            classical_engine = engines.get('classical')
-            if classical_engine:
-                encrypted_blocks, classical_metadata = classical_engine.encrypt(
-                    encrypted_blocks, 
-                    password="quantum_image_encryption"
-                )
-                logger.info(f"  Applied AES-256-GCM to {encrypted_blocks.shape[0]} blocks")
-            else:
-                logger.warning("  Classical engine not available")
-        else:
-            logger.info("  Classical Engine disabled")
-        phase_times['7_classical_encryption'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['7_classical_encryption']:.3f}s")
-        
-        # ===== STEP 8: Fusion Engine =====
-        phase_start = time.time()
-        logger.info("\n[STEP 8] Fusing encrypted blocks...")
-        fusion_engine = engines.get('fusion')
-        if fusion_engine:
-            encrypted_image = fusion_engine.fuse(
-                encrypted_blocks, 
-                original_shape,
-                block_assignments,
-                block_size
-            )
-            logger.info(f"  Fused image shape: {encrypted_image.shape}")
-        else:
-            logger.error("Fusion engine not initialized")
-            raise RuntimeError("Fusion engine required")
-        phase_times['8_fusion'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['8_fusion']:.3f}s")
-        
-        # ===== STEP 9: Metadata Management =====
-        phase_start = time.time()
-        logger.info("\n[STEP 9] Creating and storing metadata...")
-        metadata_engine = engines.get('metadata')
-        if metadata_engine:
-            metadata = metadata_engine.create_metadata(
-                roi_mask=roi_mask,
-                block_assignments=block_assignments,
-                encryption_keys=None,
-                image_shape=original_shape,
-                processing_params={
-                    'block_size': block_size,
-                    'encryption_level': str(encryption_decision.get('primary_encryption_level')) if encryption_decision else 'N/A',
-                    'quantum_seed': secure_seed,  # Store seed for decryption
-                    'encryption_method': 'Quantum Repo + Classical AES'
-                }
-            )
-            logger.info(f"  Created metadata with {len(metadata)} fields")
-            
-            # Save metadata
-            output_dir = Path(config.get('output', {}).get('metadata_dir', 'output/metadata'))
-            output_dir.mkdir(parents=True, exist_ok=True)
-            metadata_file = output_dir / "encryption_metadata.json"
-            
-            if metadata_engine.save_metadata(metadata, str(metadata_file)):
-                logger.info(f"  Saved metadata to {metadata_file}")
-            
-            result['metadata'] = metadata
-        else:
-            logger.warning("Metadata engine not initialized")
-        phase_times['9_metadata'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['9_metadata']:.3f}s")
-        
-        # ===== STEP 10: Verification =====
-        phase_start = time.time()
-        logger.info("\n[STEP 10] Integrity Verification...")
-        if config.get('verification_engine', {}).get('enabled', True):
-            logger.info("  Verification Engine enabled")
-            logger.info("  Hash check: [OK]")
-            logger.info("  Pixel equality: [OK]")
-            logger.info("  Statistics: [OK]")
-            result['metrics']['verification_passed'] = True
-        else:
-            logger.info("  Verification Engine disabled")
-        phase_times['10_verification'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['10_verification']:.3f}s")
-        
-        # ===== STEP 11: Save Encrypted Image =====
-        phase_start = time.time()
-        logger.info("\n[STEP 11] Saving encrypted image...")
-        output_path = encrypted_dir / "encrypted_image.png"
-        
-        if save_image(encrypted_image, str(output_path)):
-            logger.info(f"  Saved encrypted image to {output_path}")
-            result['image'] = encrypted_image
-        else:
-            raise RuntimeError(f"Failed to save encrypted image")
-        phase_times['11_save_image'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['11_save_image']:.3f}s")
-        
-        # ===== STEP 12: Collect Metrics =====
-        phase_start = time.time()
-        logger.info("\n[STEP 12] Collecting metrics...")
-        result['metrics']['input_info'] = get_image_info(image)
-        result['metrics']['output_info'] = get_image_info(encrypted_image)
-        result['metrics']['entropy'] = float(np.random.uniform(7.5, 8.0))
-        logger.info(f"  Entropy: {result['metrics']['entropy']:.3f} bits")
-        phase_times['12_metrics'] = time.time() - phase_start
-        logger.info(f"  [TIME] {phase_times['12_metrics']:.3f}s")
-        
-        # ===== SUCCESS =====
-        elapsed_time = time.time() - start_time
+        # ---- output paths ----
+        stem = Path(image_path).stem
+        out_root    = Path('output')
+        enc_dir     = out_root / f"{stem}_01_encrypted"
+        dec_dir     = out_root / f"{stem}_02_decrypted"
+        meta_dir    = out_root / 'metadata'
+        for d in (enc_dir, dec_dir, meta_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+        # ==============================================================
+        # LAYER 1 - Preprocessing
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[LAYER 1] Preprocessing")
+        prep = PreprocessingEngine(config)
+        prep.initialize()
+        image = prep.load_image(image_path)
+        assert prep.validate(image), "Image validation failed"
+        phase_times['L1_preprocess'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L1_preprocess']:.3f}s")
+
+        # ==============================================================
+        # LAYER 2 - AI Segmentation (FlexiMo / fallback)
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[LAYER 2] AI Segmentation (FlexiMo / contrast fallback)")
+        ai = AIEngine(config)
+        ai.initialize()
+        roi_mask = ai.generate_roi_mask(image)
+        phase_times['L2_ai_segment'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L2_ai_segment']:.3f}s")
+
+        # ==============================================================
+        # LAYER 3 - Decision: ROI / BG split + 8x8 blocking
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[LAYER 3] Decision Engine - ROI/BG split (8x8 blocks)")
+        dec_eng = DecisionEngine(config)
+        dec_eng.initialize()
+        split = dec_eng.separate_roi_bg(image, roi_mask)
+        roi_blocks = split['roi_blocks']
+        block_map  = split['block_map']
+        bg_image   = split['bg_image']
+        logger.info(f"  ROI blocks: {len(roi_blocks)}, BG shape: {bg_image.shape}")
+        phase_times['L3_decision'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L3_decision']:.3f}s")
+
+        # ==============================================================
+        # Generate master seed
+        # ==============================================================
+        master_seed = secrets.randbelow(2**31 - 1)
+        logger.info(f"\n  Master seed (secure random): {master_seed}")
+
+        # ==============================================================
+        # LAYER 4 - Quantum Encryption (NEQR - Repo B)
+        # ==============================================================
+        ps = time.time()
+        logger.info(f"\n[LAYER 4] Quantum NEQR Encryption ({len(roi_blocks)} ROI blocks)")
+        qe = QuantumEngine(config)
+        qe.initialize()
+
+        def _progress(cur, tot):
+            logger.info(f"    Quantum progress: {cur}/{tot} blocks ({cur/tot*100:.0f}%)")
+
+        encrypted_roi = qe.encrypt_blocks(roi_blocks, master_seed,
+                                           progress_callback=_progress)
+        phase_times['L4_quantum_enc'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L4_quantum_enc']:.3f}s")
+
+        # ==============================================================
+        # LAYER 5 - Classical AES-256-GCM (background)
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[LAYER 5] Classical AES-256-GCM (background)")
+        ce = ClassicalEngine(config)
+        ce.initialize()
+        bg_bundle = ce.encrypt(bg_image, master_seed)
+        phase_times['L5_classical_enc'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L5_classical_enc']:.3f}s")
+
+        # ==============================================================
+        # LAYER 6 - Fusion
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[LAYER 6] Fusion - merge encrypted ROI + BG")
+        fe = FusionEngine(config)
+        fe.initialize()
+        bg_visual = fe.create_bg_visual(bg_image, master_seed)
+        encrypted_image = fe.fuse_encrypted(
+            encrypted_roi, bg_visual, block_map, image.shape)
+        phase_times['L6_fusion'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['L6_fusion']:.3f}s")
+
+        # ==============================================================
+        # Metadata
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[META] Saving encryption metadata")
+        me = MetadataEngine(config)
+        me.initialize()
+        metadata_path = str(meta_dir / 'encryption_metadata.json')
+        me.save(
+            metadata_path,
+            master_seed=master_seed,
+            shots=qe.shots,
+            image_shape=image.shape,
+            block_map=block_map,
+            roi_mask=roi_mask,
+            bg_encrypted_bundle=bg_bundle,
+            encrypted_roi_blocks=encrypted_roi,
+        )
+        phase_times['metadata'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['metadata']:.3f}s")
+
+        # ==============================================================
+        # Save encrypted image
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[SAVE] Saving encrypted image")
+        enc_path = str(enc_dir / 'encrypted_image.png')
+        prep.save_image(encrypted_image, enc_path)
+        phase_times['save_enc'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['save_enc']:.3f}s")
+
+        # ==============================================================
+        # Verification
+        # ==============================================================
+        ps = time.time()
+        logger.info("\n[VERIFY] Encryption quality check")
+        ve = VerificationEngine(config)
+        ve.initialize()
+        enc_metrics = ve.verify_encryption(image, encrypted_image)
+        result['metrics'].update(enc_metrics)
+        phase_times['verify'] = time.time() - ps
+        logger.info(f"  [TIME] {phase_times['verify']:.3f}s")
+
+        # ==============================================================
+        # Done
+        # ==============================================================
+        elapsed = time.time() - t0
         result['success'] = True
-        result['processing_time'] = elapsed_time
+        result['processing_time'] = elapsed
         result['phase_times'] = phase_times
-        
+        result['encrypted_image_path'] = enc_path
+        result['metadata_path'] = metadata_path
+        result['encrypted_dir'] = str(enc_dir)
+        result['decrypted_dir'] = str(dec_dir)
+        result['input_filename_stem'] = stem
+
         logger.info("\n" + "=" * 80)
-        logger.info(f"[SUCCESS] ENCRYPTION COMPLETE in {elapsed_time:.2f} seconds")
-        
-        # Print timing summary
-        logger.info("\n[TIMING SUMMARY]")
+        logger.info(f"[SUCCESS] ENCRYPTION COMPLETE in {elapsed:.2f}s")
         logger.info("-" * 80)
-        total_phase_time = sum(phase_times.values())
-        for phase_name, phase_time in sorted(phase_times.items()):
-            percentage = (phase_time / elapsed_time) * 100 if elapsed_time > 0 else 0
-            logger.info(f"  {phase_name:.<35} {phase_time:>8.3f}s ({percentage:>5.1f}%)")
+        for k, v in sorted(phase_times.items()):
+            pct = v / elapsed * 100 if elapsed else 0
+            logger.info(f"  {k:.<35} {v:>8.3f}s ({pct:>5.1f}%)")
         logger.info("-" * 80)
-        logger.info(f"  {'Total':.<35} {elapsed_time:>8.2f}s (100.0%)")
+        logger.info(f"  {'Total':.<35} {elapsed:>8.2f}s (100.0%)")
         logger.info("=" * 80)
-        
-        # Store encrypted image path and directories for later use
-        result['encrypted_image_path'] = str(output_path)
-        result['encrypted_dir'] = str(encrypted_dir)
-        result['decrypted_dir'] = str(decrypted_dir)
-        result['metadata_dir'] = str(metadata_dir)
-        result['input_filename_stem'] = input_filename_stem
-        result['input_filename_full'] = input_filename_full
-        
-        # ===== AUTOMATIC DECRYPTION =====
-        logger.info("\n\n" + "=" * 80)
-        logger.info("AUTOMATICALLY STARTING DECRYPTION PIPELINE...")
-        logger.info("=" * 80)
-        
-        # Paths for decryption
-        encrypted_image_path = str(output_path)
-        metadata_path = metadata_dir / "encryption_metadata.json"
-        
+
+        # ---- automatic decryption ----
+        logger.info("\n\nAUTOMATICALLY STARTING DECRYPTION...\n")
         try:
-            # Import and run decryption
-            from main_decrypt import orchestrate_decryption
-            
-            decrypt_result = orchestrate_decryption(encrypted_image_path, str(metadata_path), config_path, str(decrypted_dir))
-            
-            if decrypt_result['success']:
-                logger.info("\n" + "=" * 80)
-                logger.info("[SUCCESS] COMPLETE ENCRYPTION-DECRYPTION CYCLE SUCCESSFUL!")
-                logger.info("=" * 80)
-                logger.info(f"Total time (Encryption + Decryption): {elapsed_time + decrypt_result.get('processing_time', 0):.2f} seconds")
-                logger.info(f"\nEncrypted image:  {encrypted_dir}/encrypted_image.png")
-                logger.info(f"Decrypted image:  {decrypted_dir}/decrypted_image.png")
-                logger.info(f"Metadata file:    {metadata_path}")
-                logger.info("=" * 80)
-                
-                # ===== GENERATE HTML COMPARISON =====
-                logger.info("\n[STEP] Generating HTML comparison page...")
-                try:
-                    # Prepare relative paths from output directory
-                    input_filename_stem = result.get('input_filename_stem', 'image')
-                    input_filename_full = result.get('input_filename_full', 'image.png')
-                    original_rel = "../input/" + input_filename_full
-                    encrypted_rel = f"{input_filename_stem}_01_encrypted/encrypted_image.png"
-                    decrypted_rel = f"{input_filename_stem}_02_decrypted/decrypted_image.png"
-                    
-                    # Prepare metrics
-                    metrics = {
-                        'encryption_quality': result['metrics'].get('encryption_quality', 99.4),
-                        'entropy': result['metrics'].get('entropy', 7.5),
-                        'decryption_quality': decrypt_result['metrics'].get('decryption_quality', 85),
-                        'encryption_time': elapsed_time,
-                        'decryption_time': decrypt_result.get('processing_time', 0),
-                        'mse': decrypt_result['metrics'].get('mse', 5263),
-                        'original_info': result['metrics'].get('input_info', {}),
-                        'encrypted_info': result['metrics'].get('output_info', {}),
-                        'decrypted_info': decrypt_result['metrics'].get('output_info', {})
-                    }
-                    
-                    html_file = HTMLGenerator.generate_comparison_html(
-                        original_image_path=original_rel,
-                        encrypted_image_path=encrypted_rel,
-                        decrypted_image_path=decrypted_rel,
-                        metrics=metrics,
-                        output_path='output/image_comparison.html'
-                    )
-                    logger.info(f"  Generated HTML comparison: {html_file}")
-                except Exception as e:
-                    logger.warning(f"Failed to generate HTML: {str(e)}")
-                
-                result['decryption'] = decrypt_result
+            from workflows.decrypt import orchestrate_decryption
+
+            dec_result = orchestrate_decryption(
+                enc_path, metadata_path, config_path, str(dec_dir))
+
+            if dec_result.get('success'):
+                result['decryption'] = dec_result
                 result['full_cycle'] = True
-                return result
-            else:
-                logger.error(f"Decryption failed: {decrypt_result.get('error', 'Unknown error')}")
-                result['decryption'] = decrypt_result
-                return result
-                
-        except Exception as e:
-            logger.warning(f"Automatic decryption failed: {str(e)}")
-            logger.info("To decrypt later, run: python main_decrypt.py")
-            
-            # Generate HTML even if decryption failed (showing only encryption)
-            logger.info("\n[STEP] Generating HTML comparison page (encryption only)...")
-            try:
-                input_filename_stem = result.get('input_filename_stem', 'image')
-                input_filename_full = result.get('input_filename_full', 'image.png')
-                original_rel = "../input/" + input_filename_full
-                encrypted_rel = f"{input_filename_stem}_01_encrypted/encrypted_image.png"
-                decrypted_rel = f"{input_filename_stem}_02_decrypted/decrypted_image.png"
-                
-                metrics = {
-                    'encryption_quality': result['metrics'].get('encryption_quality', 99.4),
-                    'entropy': result['metrics'].get('entropy', 7.5),
-                    'decryption_quality': 'N/A',
-                    'encryption_time': elapsed_time,
-                    'decryption_time': 'N/A',
-                    'mse': 'N/A',
-                    'original_info': result['metrics'].get('input_info', {}),
-                    'encrypted_info': result['metrics'].get('output_info', {}),
-                    'decrypted_info': {}
-                }
-                
-                html_file = HTMLGenerator.generate_comparison_html(
-                    original_image_path=original_rel,
-                    encrypted_image_path=encrypted_rel,
-                    decrypted_image_path=decrypted_rel,
-                    metrics=metrics,
-                    output_path='output/image_comparison.html'
-                )
-                logger.info(f"  Generated HTML comparison: {html_file}")
-            except Exception as html_error:
-                logger.warning(f"Failed to generate HTML: {str(html_error)}")
-            
-            return result
-    
+                total = elapsed + dec_result.get('processing_time', 0)
+                logger.info(f"\n[FULL CYCLE] Encrypt + Decrypt = {total:.2f}s")
+        except Exception as ex:
+            logger.warning(f"Auto-decryption skipped: {ex}")
+
+        return result
+
     except Exception as e:
-        elapsed_time = time.time() - start_time
+        elapsed = time.time() - t0
         result['error'] = str(e)
-        result['processing_time'] = elapsed_time
-        
-        logger.error("\n" + "=" * 80)
-        logger.error(f"[FAILED] ENCRYPTION FAILED after {elapsed_time:.2f} seconds")
-        logger.error(f"Error: {str(e)}")
-        logger.error("=" * 80)
-        
+        result['processing_time'] = elapsed
+        logger.error(f"\n[FAILED] {e}")
         import traceback
         logger.error(traceback.format_exc())
-        
         return result
 
 
+# ====================================================================
+# CLI
+# ====================================================================
+
 def main():
-    """Main entry point."""
-    from pathlib import Path
-    
-    # Get image path from command line argument or auto-detect from input folder
+    image_path = None
+
     if len(sys.argv) > 1:
         image_path = sys.argv[1]
     else:
-        # Auto-detect images in input folder
         input_dir = Path("input")
-        
-        # Look for images in this order: st1.png, test_image.png, or first PNG found
-        preferred_images = ["st1.png", "test_image.png"]
-        image_path = None
-        
-        for preferred in preferred_images:
-            candidate = input_dir / preferred
-            if candidate.exists():
-                image_path = str(candidate)
+        for name in ("st1.png", "test_image.png"):
+            p = input_dir / name
+            if p.exists():
+                image_path = str(p)
                 break
-        
-        # If not found, try to find any PNG file
         if image_path is None:
-            png_files = list(input_dir.glob("*.png"))
-            if png_files:
-                image_path = str(png_files[0])
-                print(f"Auto-detected image: {image_path}")
+            pngs = list(input_dir.glob("*.png"))
+            jpgs = list(input_dir.glob("*.jpg")) + list(input_dir.glob("*.jpeg"))
+            imgs = pngs + jpgs
+            if imgs:
+                image_path = str(imgs[0])
+                print(f"Auto-detected: {image_path}")
             else:
-                print("ERROR: No PNG images found in input folder!")
-                print(f"Available files in input/: {list(input_dir.glob('*'))}")
+                print("ERROR: No images found in input/")
                 sys.exit(1)
-    
-    # Verify file exists
+
     if not Path(image_path).exists():
-        print(f"ERROR: Image file not found: {image_path}")
+        print(f"ERROR: {image_path} not found")
         sys.exit(1)
-    
+
     result = orchestrate_encryption(image_path)
-    
     if result['success']:
-        logger = logging.getLogger('orchestrator')
-        logger.info("\nPipeline executed successfully!")
-        logger.info(f"Metrics: {result['metrics']}")
-        
-        # Open HTML comparison in browser
-        try:
-            import webbrowser
-            html_file = Path('output/image_comparison.html').resolve()
-            if html_file.exists():
-                logger.info(f"\nOpening HTML comparison: {html_file}")
-                webbrowser.open(f'file://{html_file}')
-            else:
-                logger.warning(f"HTML comparison file not found: {html_file}")
-        except Exception as e:
-            logger.warning(f"Could not open HTML in browser: {str(e)}")
+        print("\nPipeline completed successfully!")
     else:
-        logger = logging.getLogger('orchestrator')
-        logger.error(f"\nPipeline failed: {result['error']}")
+        print(f"\nPipeline failed: {result['error']}")
         sys.exit(1)
 
 
